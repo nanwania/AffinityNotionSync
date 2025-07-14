@@ -3,6 +3,7 @@ import {
   syncPairs, 
   syncHistory, 
   conflicts,
+  syncedRecords,
   type User, 
   type InsertUser, 
   type SyncPair, 
@@ -10,7 +11,9 @@ import {
   type SyncHistory,
   type InsertSyncHistory,
   type Conflict,
-  type InsertConflict
+  type InsertConflict,
+  type SyncedRecord,
+  type InsertSyncedRecord
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -38,6 +41,11 @@ export interface IStorage {
   createConflict(conflict: InsertConflict): Promise<Conflict>;
   resolveConflict(id: number, resolution: string): Promise<Conflict>;
   deleteConflict(id: number): Promise<void>;
+  
+  // Synced Records
+  getSyncedRecord(syncPairId: number, recordId: string): Promise<SyncedRecord | undefined>;
+  createOrUpdateSyncedRecord(syncedRecord: InsertSyncedRecord): Promise<SyncedRecord>;
+  deleteSyncedRecord(syncPairId: number, recordId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -147,6 +155,41 @@ export class DatabaseStorage implements IStorage {
 
   async deleteConflict(id: number): Promise<void> {
     await db.delete(conflicts).where(eq(conflicts.id, id));
+  }
+
+  async getSyncedRecord(syncPairId: number, recordId: string): Promise<SyncedRecord | undefined> {
+    const [record] = await db.select()
+      .from(syncedRecords)
+      .where(and(eq(syncedRecords.syncPairId, syncPairId), eq(syncedRecords.recordId, recordId)));
+    return record || undefined;
+  }
+
+  async createOrUpdateSyncedRecord(syncedRecord: InsertSyncedRecord): Promise<SyncedRecord> {
+    // Try to find existing record
+    const existing = await this.getSyncedRecord(syncedRecord.syncPairId, syncedRecord.recordId);
+    
+    if (existing) {
+      // Update existing record
+      const [updated] = await db.update(syncedRecords)
+        .set({
+          ...syncedRecord,
+          updatedAt: new Date()
+        })
+        .where(eq(syncedRecords.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new record
+      const [created] = await db.insert(syncedRecords)
+        .values(syncedRecord)
+        .returning();
+      return created;
+    }
+  }
+
+  async deleteSyncedRecord(syncPairId: number, recordId: string): Promise<void> {
+    await db.delete(syncedRecords)
+      .where(and(eq(syncedRecords.syncPairId, syncPairId), eq(syncedRecords.recordId, recordId)));
   }
 }
 

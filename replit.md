@@ -98,6 +98,15 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 14, 2025: Intelligent Sync Tracking System
+- Implemented database-backed sync tracking to eliminate unnecessary updates
+- Added `synced_records` table to store hashes of normalized field values
+- System now only updates records when field values actually change
+- Fixed sync history showing incorrect "records updated" count for unchanged data
+- Sync performance improved by skipping identical records on subsequent syncs
+- Added proper cleanup of synced records when Notion pages are deleted
+- Hash-based comparison ensures accurate change detection regardless of data format differences
+
 ### July 14, 2025: Field Mapping Data Conversion Fix
 - Fixed critical issue with Affinity field values not syncing to Notion properly
 - Updated `convertAffinityToNotionProperty` function in Notion service to handle Affinity dropdown format

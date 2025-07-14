@@ -1,8 +1,9 @@
 import { affinityService, AffinityListEntry, AffinityFieldValue } from './affinity';
 import { notionService, NotionPage } from './notion';
 import { storage } from '../storage';
-import { SyncPair, InsertSyncHistory, InsertConflict } from '@shared/schema';
+import { SyncPair, InsertSyncHistory, InsertConflict, InsertSyncedRecord } from '@shared/schema';
 import cron from 'node-cron';
+import { createHash } from 'crypto';
 
 export interface SyncResult {
   success: boolean;
@@ -24,6 +25,36 @@ export interface FieldMapping {
 export class SyncService {
   private activeSyncs = new Set<number>();
   private scheduledJobs = new Map<number, cron.ScheduledTask>();
+
+  // Utility function to normalize and hash field values for comparison
+  private normalizeAndHashFieldValues(fieldValues: AffinityFieldValue[], fieldMappings: FieldMapping[]): string {
+    const normalizedValues: Record<string, any> = {};
+    
+    for (const mapping of fieldMappings) {
+      const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
+      if (fieldValue) {
+        // Normalize the value to extract actual content
+        let normalizedValue = fieldValue.value;
+        
+        if (Array.isArray(normalizedValue)) {
+          normalizedValue = normalizedValue.map(item => {
+            if (typeof item === 'object' && item !== null && 'text' in item) {
+              return item.text; // Extract text from Affinity dropdown format
+            }
+            return item;
+          }).sort(); // Sort for consistent comparison
+        } else if (typeof normalizedValue === 'object' && normalizedValue !== null && 'text' in normalizedValue) {
+          normalizedValue = normalizedValue.text; // Extract text from single Affinity dropdown item
+        }
+        
+        normalizedValues[mapping.affinityField] = normalizedValue;
+      }
+    }
+    
+    // Create a hash of the normalized values
+    const valueString = JSON.stringify(normalizedValues, Object.keys(normalizedValues).sort());
+    return createHash('sha256').update(valueString).digest('hex');
+  }
   
   // Clear stuck sync processes
   clearActiveSyncs(): void {
@@ -216,7 +247,17 @@ export class SyncService {
           const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
 
           if (existingNotionPage) {
-            // Check for conflicts
+            // Check if we have a synced record for this entry
+            const syncedRecord = await storage.getSyncedRecord(syncPair.id, affinityId);
+            const currentFieldHash = this.normalizeAndHashFieldValues(fieldValues, syncPair.fieldMappings as FieldMapping[]);
+            
+            // If we have a synced record and the hash matches, skip this entry
+            if (syncedRecord && syncedRecord.fieldValuesHash === currentFieldHash) {
+              // Values haven't changed since last sync - no update needed
+              return { type: 'unchanged', count: 0 };
+            }
+
+            // Check for conflicts (only if values have changed)
             const conflicts = await this.detectConflicts(syncPair, entry, existingNotionPage, fieldValues);
             if (conflicts.length > 0) {
               return { type: 'conflict', count: conflicts.length };
@@ -224,10 +265,39 @@ export class SyncService {
 
             // Update existing page
             await notionService.updatePage(existingNotionPage.id, notionProperties);
+            
+            // Update or create synced record
+            await storage.createOrUpdateSyncedRecord({
+              syncPairId: syncPair.id,
+              recordId: affinityId,
+              recordType: affinityService.getEntityType(entry.entity),
+              affinityId: affinityId,
+              notionPageId: existingNotionPage.id,
+              fieldValuesHash: currentFieldHash,
+              affinityLastModified: entry.entity.last_modified ? new Date(entry.entity.last_modified) : new Date(),
+              notionLastModified: new Date(existingNotionPage.last_edited_time),
+              lastSyncedAt: new Date()
+            });
+            
             return { type: 'updated', count: 1 };
           } else {
             // Create new page
-            await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
+            const newPage = await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
+            const currentFieldHash = this.normalizeAndHashFieldValues(fieldValues, syncPair.fieldMappings as FieldMapping[]);
+            
+            // Create synced record for the new page
+            await storage.createOrUpdateSyncedRecord({
+              syncPairId: syncPair.id,
+              recordId: affinityId,
+              recordType: affinityService.getEntityType(entry.entity),
+              affinityId: affinityId,
+              notionPageId: newPage.id,
+              fieldValuesHash: currentFieldHash,
+              affinityLastModified: entry.entity.last_modified ? new Date(entry.entity.last_modified) : new Date(),
+              notionLastModified: new Date(newPage.last_edited_time),
+              lastSyncedAt: new Date()
+            });
+            
             return { type: 'created', count: 1 };
           }
         });
@@ -267,6 +337,8 @@ export class SyncService {
         try {
           console.log(`Deleting Notion page for Affinity ID ${affinityId}: ${notionPage.id} (${reason})`);
           await notionService.deletePage(notionPage.id);
+          // Also delete the corresponding synced record
+          await storage.deleteSyncedRecord(syncPair.id, affinityId);
           recordsDeleted++;
         } catch (error) {
           console.error(`Failed to delete Notion page ${notionPage.id} for Affinity ID ${affinityId}:`, error);
@@ -422,8 +494,29 @@ export class SyncService {
         const affinityValue = affinityFieldValue.value;
         const notionValue = notionService.convertNotionToAffinityValue(notionProperty);
 
-        // Compare values - only create conflicts if they actually differ
-        if (JSON.stringify(affinityValue) !== JSON.stringify(notionValue)) {
+        // Normalize both values to compare their actual content, not format
+        const normalizeValue = (value: any): any => {
+          if (Array.isArray(value)) {
+            return value.map(item => {
+              if (typeof item === 'object' && item !== null && 'text' in item) {
+                return item.text; // Extract text from Affinity dropdown format
+              }
+              return item;
+            }).sort(); // Sort for consistent comparison
+          }
+          if (typeof value === 'object' && value !== null && 'text' in value) {
+            return value.text; // Extract text from single Affinity dropdown item
+          }
+          return value;
+        };
+
+        const normalizedAffinityValue = normalizeValue(affinityValue);
+        const normalizedNotionValue = normalizeValue(notionValue);
+
+        // Note: Values are now normalized for accurate comparison
+
+        // Compare normalized values - only create conflicts if they actually differ
+        if (JSON.stringify(normalizedAffinityValue) !== JSON.stringify(normalizedNotionValue)) {
           
           // Get Affinity field modification time (if available)
           // Note: Affinity API doesn't provide field-level modification times in v2,
@@ -433,8 +526,10 @@ export class SyncService {
             : new Date();
 
           console.log(`Conflict detected for field '${mapping.affinityField}':`, {
-            affinityValue: JSON.stringify(affinityValue).substring(0, 100),
-            notionValue: JSON.stringify(notionValue).substring(0, 100),
+            affinityValue: JSON.stringify(normalizedAffinityValue),
+            notionValue: JSON.stringify(normalizedNotionValue),
+            affinityRaw: JSON.stringify(affinityValue).substring(0, 100),
+            notionRaw: JSON.stringify(notionValue).substring(0, 100),
             affinityLastModified: affinityLastModified.toISOString(),
             notionLastModified: notionLastModified.toISOString(),
             lastSyncTime: lastSyncTime.toISOString()
@@ -502,22 +597,9 @@ export class SyncService {
 
             conflicts.push(conflict);
             await storage.createConflict(conflict);
-          } else if (autoResolution) {
-            // Apply auto-resolution immediately
-            if (autoResolution === 'affinity') {
-              // Update Notion with Affinity value
-              await notionService.updatePage(notionPage.id, {
-                [mapping.notionProperty]: notionService.convertAffinityToNotionProperty(
-                  affinityValue, 
-                  notionService.getPropertyType(await notionService.getDatabase(syncPair.notionDatabaseId), mapping.notionProperty)
-                )
-              });
-            } else {
-              // Update Affinity with Notion value (if supported by API)
-              // Note: Affinity v2 API has limited field update capabilities
-              console.log(`Would update Affinity field '${mapping.affinityField}' with Notion value, but API limitations may apply`);
-            }
-          }
+          } 
+          // Note: Auto-resolved conflicts don't need to be added to conflicts array
+          // or update pages here - the main sync logic will handle the update
         }
       }
     }
