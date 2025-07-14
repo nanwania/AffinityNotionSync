@@ -135,11 +135,99 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     }
   };
 
-  const handleNotionPropertyChange = (affinityFieldName: string, notionProperty: string) => {
-    setSelectedFields(prev => ({
-      ...prev,
-      [affinityFieldName]: notionProperty
-    }));
+  // Map Affinity field types to Notion property types
+  const mapAffinityToNotionType = (affinityField: any): string => {
+    if (!affinityField?.value_type) return "rich_text";
+    
+    switch (affinityField.value_type) {
+      case 1: // Text/String
+      case 6: // Long text/Description
+        return "rich_text";
+      case 2: // Dropdown (single or multi)
+        return affinityField.allows_multiple ? "multi_select" : "select";
+      case 3: // Number
+        return "number";
+      case 4: // Date
+        return "date";
+      case 5: // Location/Address
+        return "rich_text";
+      case 7: // Person
+      case 8: // Organization
+        return "relation";
+      case 9: // URL
+        return "url";
+      case 10: // Email
+        return "email";
+      case 11: // Phone
+        return "phone_number";
+      default:
+        return "rich_text";
+    }
+  };
+
+  const handleNotionPropertyChange = async (affinityFieldName: string, notionProperty: string) => {
+    // Check if user selected "Create new property"
+    if (notionProperty === "__CREATE_NEW__") {
+      // Find the affinity field data to determine appropriate type
+      let affinityFieldData = null;
+      
+      // Search through all field categories to find the field data
+      if (allAffinityFields) {
+        const allFields = [
+          ...(allAffinityFields.virtual || []),
+          ...(allAffinityFields.global || []),
+          ...(allAffinityFields.list || []),
+          ...(allAffinityFields.person || []),
+          ...(allAffinityFields.organization || []),
+          ...(allAffinityFields.opportunity || [])
+        ];
+        affinityFieldData = allFields.find(f => f.name === affinityFieldName);
+      }
+      
+      const propertyType = mapAffinityToNotionType(affinityFieldData);
+      
+      try {
+        setCreatingProperty(true);
+        await apiRequest(
+          "POST",
+          `/api/notion/databases/${formData.notionDatabaseId}/properties`,
+          {
+            propertyName: affinityFieldName,
+            propertyType: propertyType,
+          }
+        );
+
+        // Refresh the database info to get the new property
+        await queryClient.invalidateQueries({
+          queryKey: ["/api/notion/databases", formData.notionDatabaseId],
+        });
+
+        toast({
+          title: "Success",
+          description: `Property "${affinityFieldName}" created successfully`,
+        });
+
+        // Set the newly created property as selected
+        setSelectedFields(prev => ({
+          ...prev,
+          [affinityFieldName]: affinityFieldName
+        }));
+      } catch (error) {
+        console.error("Error creating property:", error);
+        toast({
+          title: "Error",
+          description: "Failed to create property",
+          variant: "destructive",
+        });
+      } finally {
+        setCreatingProperty(false);
+      }
+    } else {
+      setSelectedFields(prev => ({
+        ...prev,
+        [affinityFieldName]: notionProperty
+      }));
+    }
   };
 
   // Convert selectedFields to fieldMappings format for submission
@@ -535,6 +623,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                           {property}
                                         </SelectItem>
                                       ))}
+                                      <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                        ➕ Create new property "{field.name}"
+                                      </SelectItem>
                                     </SelectContent>
                                   </Select>
                                 ) : (
@@ -583,6 +674,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                             {property}
                                           </SelectItem>
                                         ))}
+                                        <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                          ➕ Create new property "{field.name}"
+                                        </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
@@ -632,6 +726,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                             {property}
                                           </SelectItem>
                                         ))}
+                                        <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                          ➕ Create new property "{field.name}"
+                                        </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
@@ -681,6 +778,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                             {property}
                                           </SelectItem>
                                         ))}
+                                        <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                          ➕ Create new property "{field.name}"
+                                        </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
@@ -730,6 +830,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                             {property}
                                           </SelectItem>
                                         ))}
+                                        <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                          ➕ Create new property "{field.name}"
+                                        </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
@@ -779,6 +882,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                             {property}
                                           </SelectItem>
                                         ))}
+                                        <SelectItem value="__CREATE_NEW__" className="text-blue-600 font-medium">
+                                          ➕ Create new property "{field.name}"
+                                        </SelectItem>
                                       </SelectContent>
                                     </Select>
                                   ) : (
