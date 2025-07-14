@@ -76,49 +76,85 @@ export class AffinityService {
 
     this.client = axios.create({
       baseURL: 'https://api.affinity.co',
-      auth: {
-        username: '',
-        password: apiKey
-      },
       headers: {
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       }
     });
   }
 
   async getLists(): Promise<AffinityList[]> {
-    const response = await this.client.get('/lists');
-    return response.data;
+    const response = await this.client.get('/v2/lists');
+    return response.data.data || response.data;
   }
 
   async getList(listId: number): Promise<AffinityList> {
-    const response = await this.client.get(`/lists/${listId}`);
+    const response = await this.client.get(`/v2/lists/${listId}`);
     return response.data;
   }
 
-  async getListEntries(listId: number, pageSize: number = 100, pageToken?: string): Promise<{ entries: AffinityListEntry[], nextPageToken?: string }> {
-    const params: any = { page_size: pageSize };
-    if (pageToken) {
-      params.page_token = pageToken;
+  async getListEntries(listId: number, cursor?: string): Promise<{ entries: AffinityListEntry[], nextUrl?: string }> {
+    // Get list fields first to include them in the request
+    const listFields = await this.getFields(listId);
+    const fieldIds = listFields.map(f => f.id);
+    
+    const params: any = { 
+      fieldIds: fieldIds.join(',') // Include all list fields
+    };
+    if (cursor) {
+      params.cursor = cursor;
     }
 
-    const response = await this.client.get(`/lists/${listId}/list-entries`, { params });
+    console.log(`API v2 Request: GET /v2/lists/${listId}/list-entries with params:`, params);
+    const response = await this.client.get(`/v2/lists/${listId}/list-entries`, { params });
+    
+    console.log(`API v2 Response: Got ${(response.data.data || []).length} entries`);
+    console.log('Next URL:', response.data.nextUrl);
+    
+    // Debug: Log first entry structure to understand v2 response format
+    if (response.data.data && response.data.data.length > 0) {
+      console.log('First entry with fields:', JSON.stringify(response.data.data[0], null, 2).substring(0, 1000));
+    }
+    
     return {
-      entries: response.data.list_entries || response.data,
-      nextPageToken: response.headers['x-next-page-token']
+      entries: response.data.data || [],
+      nextUrl: response.data.nextUrl
     };
   }
 
   async getAllListEntries(listId: number): Promise<AffinityListEntry[]> {
     const allEntries: AffinityListEntry[] = [];
-    let nextPageToken: string | undefined;
+    let nextUrl: string | undefined;
+    let pageCount = 0;
+
+    console.log(`Fetching all entries for list ${listId} using API v2...`);
 
     do {
-      const result = await this.getListEntries(listId, 100, nextPageToken);
+      pageCount++;
+      
+      let cursor: string | undefined;
+      if (nextUrl) {
+        // Extract cursor from nextUrl
+        const url = new URL(nextUrl);
+        cursor = url.searchParams.get('cursor') || undefined;
+        console.log(`Fetching page ${pageCount} with cursor: ${cursor?.substring(0, 20)}...`);
+      } else {
+        console.log(`Fetching page ${pageCount} (first page)`);
+      }
+      
+      const result = await this.getListEntries(listId, cursor);
       allEntries.push(...result.entries);
-      nextPageToken = result.nextPageToken;
-    } while (nextPageToken);
+      nextUrl = result.nextUrl;
+      
+      console.log(`Page ${pageCount}: Got ${result.entries.length} entries. Total so far: ${allEntries.length}`);
+      if (nextUrl) {
+        console.log(`Next URL available: ${nextUrl.substring(0, 60)}...`);
+      } else {
+        console.log('No more pages available');
+      }
+    } while (nextUrl);
 
+    console.log(`Finished fetching all entries. Total: ${allEntries.length} entries across ${pageCount} pages`);
     return allEntries;
   }
 
@@ -156,42 +192,46 @@ export class AffinityService {
   }
 
   async getFields(listId?: number): Promise<AffinityField[]> {
-    const params = listId ? { list_id: listId } : {};
-    const response = await this.client.get('/fields', { params });
-    return response.data;
+    if (listId) {
+      const response = await this.client.get(`/v2/lists/${listId}/fields`);
+      return response.data.data || response.data;
+    } else {
+      const response = await this.client.get('/v2/fields');
+      return response.data.data || response.data;
+    }
   }
 
-  async getFieldValues(entityId: number, entityType: 'person' | 'organization' | 'opportunity'): Promise<AffinityFieldValue[]> {
-    const params: any = {};
-    if (entityType === 'person') {
-      params.person_id = entityId;
-    } else if (entityType === 'organization') {
-      params.organization_id = entityId;
-    } else if (entityType === 'opportunity') {
-      params.opportunity_id = entityId;
-    }
+  async getListEntryFieldValues(listId: number, listEntryId: number): Promise<AffinityFieldValue[]> {
+    const endpoint = `/v2/lists/${listId}/list-entries/${listEntryId}/fields`;
+    const response = await this.client.get(endpoint);
+    return response.data.data || response.data;
+  }
 
-    const response = await this.client.get('/field-values', { params });
-    return response.data;
+  // Legacy v1 method - deprecated, use getListEntryFieldValues instead
+  async getFieldValues(entityId: number, entityType: 'person' | 'organization' | 'opportunity'): Promise<AffinityFieldValue[]> {
+    console.warn('getFieldValues is deprecated for v2 API. Use getListEntryFieldValues instead.');
+    // For v2 API, this method cannot work the same way since field values are accessed through list entries
+    // Return empty array to prevent crashes
+    return [];
   }
 
   async getPerson(personId: number): Promise<AffinityPerson> {
-    const response = await this.client.get(`/persons/${personId}`);
+    const response = await this.client.get(`/v2/persons/${personId}`);
     return response.data;
   }
 
   async getOrganization(organizationId: number): Promise<AffinityOrganization> {
-    const response = await this.client.get(`/organizations/${organizationId}`);
+    const response = await this.client.get(`/v2/organizations/${organizationId}`);
     return response.data;
   }
 
   async updateFieldValue(fieldValueId: number, value: any): Promise<AffinityFieldValue> {
-    const response = await this.client.put(`/field-values/${fieldValueId}`, { value });
+    const response = await this.client.put(`/v2/field-values/${fieldValueId}`, { value });
     return response.data;
   }
 
   async createListEntry(listId: number, entityId: number, entityType: number): Promise<AffinityListEntry> {
-    const response = await this.client.post(`/lists/${listId}/list-entries`, {
+    const response = await this.client.post(`/v2/lists/${listId}/list-entries`, {
       entity_id: entityId,
       entity_type: entityType
     });
@@ -200,7 +240,7 @@ export class AffinityService {
 
   async getRateLimit(): Promise<{ used: number, remaining: number, reset: number }> {
     try {
-      const response = await this.client.get('/rate-limit');
+      const response = await this.client.get('/v2/rate-limit');
       return response.data;
     } catch (error) {
       // If rate limit endpoint doesn't exist, return mock data

@@ -166,7 +166,8 @@ export class SyncService {
           
           for (const entry of affinityEntries) {
             try {
-              const fieldValues = await affinityService.getFieldValues(entry.entity_id, affinityService.getEntityType(entry.entity));
+              // For v2 API, get field values using list entry ID
+              const fieldValues = await affinityService.getListEntryFieldValues(parseInt(syncPair.affinityListId), entry.id);
               const statusValue = fieldValues.find(fv => fv.field_id === statusField.id);
               
               // Handle both string and object status values
@@ -227,9 +228,8 @@ export class SyncService {
         const affinityId = entry.entity_id.toString();
         const existingNotionPage = notionPageMap.get(affinityId);
 
-        // Get field values for this entity
-        const entityType = affinityService.getEntityType(entry.entity);
-        const fieldValues = await affinityService.getFieldValues(entry.entity_id, entityType);
+        // Get field values for this list entry (v2 API method)
+        const fieldValues = await affinityService.getListEntryFieldValues(parseInt(syncPair.affinityListId), entry.id);
 
         // Convert field values to Notion properties (includes Affinity ID automatically)
         const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
@@ -299,10 +299,10 @@ export class SyncService {
 
         const existingAffinityEntry = affinityEntryMap.get(affinityId);
         if (existingAffinityEntry) {
-          // Check for conflicts
-          const fieldValues = await affinityService.getFieldValues(
-            existingAffinityEntry.entity_id, 
-            affinityService.getEntityType(existingAffinityEntry.entity)
+          // Check for conflicts - get field values using v2 API
+          const fieldValues = await affinityService.getListEntryFieldValues(
+            parseInt(syncPair.affinityListId), 
+            existingAffinityEntry.id
           );
           
           const conflicts = await this.detectConflicts(syncPair, existingAffinityEntry, page, fieldValues);
@@ -497,9 +497,9 @@ export class SyncService {
     notionPage: NotionPage
   ): Promise<void> {
     const fieldMappings = syncPair.fieldMappings as FieldMapping[];
-    const fieldValues = await affinityService.getFieldValues(
-      affinityEntry.entity_id, 
-      affinityService.getEntityType(affinityEntry.entity)
+    const fieldValues = await affinityService.getListEntryFieldValues(
+      parseInt(syncPair.affinityListId), 
+      affinityEntry.id
     );
 
     for (const mapping of fieldMappings) {
