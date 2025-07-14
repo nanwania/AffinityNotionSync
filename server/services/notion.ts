@@ -274,6 +274,36 @@ export class NotionService {
           }
         }
         
+        // Handle organization arrays with hyperlinks: [{"id":123,"name":"Company","domain":"example.com"}]
+        if (Array.isArray(affinityValue) && affinityValue.length > 0) {
+          const org = affinityValue[0];
+          if (org && typeof org === 'object' && org.name && org.domain) {
+            const url = org.domain.startsWith('http') ? org.domain : `https://${org.domain}`;
+            return {
+              rich_text: [{ 
+                type: 'text', 
+                text: { 
+                  content: org.name,
+                  link: { url: url }
+                } 
+              }]
+            };
+          }
+        }
+        // Handle single organization object with hyperlink: {"id":123,"name":"Company","domain":"example.com"}
+        else if (affinityValue && typeof affinityValue === 'object' && affinityValue.name && affinityValue.domain) {
+          const url = affinityValue.domain.startsWith('http') ? affinityValue.domain : `https://${affinityValue.domain}`;
+          return {
+            rich_text: [{ 
+              type: 'text', 
+              text: { 
+                content: affinityValue.name,
+                link: { url: url }
+              } 
+            }]
+          };
+        }
+        
         return {
           rich_text: [{ type: 'text', text: { content: String(textValue || '') } }]
         };
