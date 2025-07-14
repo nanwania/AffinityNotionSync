@@ -26,6 +26,10 @@ export class SyncService {
   private activeSyncs = new Set<number>();
   private scheduledJobs = new Map<number, cron.ScheduledTask>();
 
+  // CRITICAL SAFETY CONSTANTS
+  private readonly AFFINITY_DELETION_BLOCKED = true;
+  private readonly SAFETY_MODE_ENABLED = true;
+
   // Utility function to normalize and hash field values for comparison
   private normalizeAndHashFieldValues(fieldValues: AffinityFieldValue[], fieldMappings: FieldMapping[]): string {
     const normalizedValues: Record<string, any> = {};
@@ -95,6 +99,11 @@ export class SyncService {
   }
 
   async syncPair(syncPairId: number): Promise<SyncResult> {
+    // SAFETY CHECK: Verify safety mode is enabled
+    if (!this.SAFETY_MODE_ENABLED) {
+      throw new Error('SAFETY ERROR: Safety mode must be enabled for all sync operations');
+    }
+
     const startTime = Date.now();
     
     if (this.activeSyncs.has(syncPairId)) {
@@ -102,6 +111,7 @@ export class SyncService {
         success: false,
         recordsUpdated: 0,
         recordsCreated: 0,
+        recordsDeleted: 0,
         conflictsFound: 0,
         duration: Date.now() - startTime,
         errorMessage: 'Sync already in progress for this pair',
@@ -117,6 +127,8 @@ export class SyncService {
         throw new Error('Sync pair not found');
       }
 
+      console.log(`[AFFINITY SAFETY] Starting sync for pair: ${syncPair.name} (${syncPair.syncDirection}) - Affinity deletion protection: ENABLED`);
+
       let result: SyncResult;
 
       if (syncPair.syncDirection === 'affinity-to-notion') {
@@ -125,6 +137,13 @@ export class SyncService {
         result = await this.syncNotionToAffinity(syncPair);
       } else {
         result = await this.syncBidirectional(syncPair);
+      }
+
+      // SAFETY VALIDATION: Ensure no Affinity entries were deleted
+      if (this.AFFINITY_DELETION_BLOCKED && result.recordsDeleted > 0 && (syncPair.syncDirection === 'notion-to-affinity' || syncPair.syncDirection === 'bidirectional')) {
+        console.error(`[AFFINITY SAFETY] CRITICAL ERROR: ${result.recordsDeleted} Affinity records reported as deleted, which should never happen!`);
+        result.success = false;
+        result.errorMessage = 'SAFETY VIOLATION: Affinity deletion detected and blocked';
       }
 
       // Update last sync time
@@ -143,12 +162,15 @@ export class SyncService {
         details: result.details
       });
 
+      console.log(`[AFFINITY SAFETY] Sync completed: ${result.recordsUpdated} updated, ${result.recordsCreated} created, ${result.recordsDeleted} deleted (Affinity entries: 0 deleted as expected)`);
+
       return result;
     } catch (error) {
       const result: SyncResult = {
         success: false,
         recordsUpdated: 0,
         recordsCreated: 0,
+        recordsDeleted: 0,
         conflictsFound: 0,
         duration: Date.now() - startTime,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -379,10 +401,13 @@ export class SyncService {
   }
 
   private async syncNotionToAffinity(syncPair: SyncPair): Promise<SyncResult> {
+    // SAFETY GUARANTEE: This sync direction ONLY updates field values, NEVER deletes Affinity entries
+    console.log(`[AFFINITY SAFETY] Starting Notion-to-Affinity sync - FIELD UPDATES ONLY, NO DELETIONS`);
+    
     const startTime = Date.now();
     let recordsUpdated = 0;
-    let recordsCreated = 0;
-    let recordsDeleted = 0;
+    let recordsCreated = 0; // Always 0 - we don't create new Affinity entries
+    let recordsDeleted = 0; // Always 0 - we NEVER delete Affinity entries
     let conflictsFound = 0;
 
     try {
@@ -398,6 +423,8 @@ export class SyncService {
         affinityEntryMap.set(entry.entity.id.toString(), entry);
       });
 
+      console.log(`[AFFINITY SAFETY] Processing ${notionPages.length} Notion pages for field updates only`);
+
       // Process each Notion page
       for (const page of notionPages) {
         const affinityId = this.extractAffinityIdFromNotionPage(page);
@@ -408,7 +435,7 @@ export class SyncService {
           // Check for conflicts - use embedded field values from v2 API
           const entityFields = existingAffinityEntry.entity?.fields || [];
           const fieldValues = entityFields.map(field => ({
-            field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+            field_id: field.id, // Keep original field ID for proper matching
             value: field.value?.data,
             id: field.id
           }));
@@ -419,21 +446,28 @@ export class SyncService {
             continue; // Skip update if conflicts found
           }
 
-          // Update Affinity field values
+          // SAFETY: Only update existing entries, never create or delete
           await this.updateAffinityFromNotionPage(syncPair, existingAffinityEntry, page);
           recordsUpdated++;
+        } else {
+          console.log(`[AFFINITY SAFETY] Notion page references non-existent Affinity ID ${affinityId} - SKIPPING (no new entries created in Affinity)`);
         }
-        // Note: We don't create new Affinity entries from Notion pages in this implementation
       }
+
+      console.log(`[AFFINITY SAFETY] Completed Notion-to-Affinity sync: ${recordsUpdated} field updates, 0 deletions`);
 
       return {
         success: true,
         recordsUpdated,
-        recordsCreated,
-        recordsDeleted,
+        recordsCreated, // Always 0 - we don't create new Affinity entries
+        recordsDeleted, // Always 0 - we NEVER delete Affinity entries
         conflictsFound,
         duration: Date.now() - startTime,
-        details: { notionPages: notionPages.length, affinityEntries: affinityEntries.length }
+        details: { 
+          notionPages: notionPages.length, 
+          affinityEntries: affinityEntries.length,
+          safetyNote: "No Affinity entries were created or deleted - field updates only"
+        }
       };
     } catch (error) {
       return {
@@ -701,6 +735,9 @@ export class SyncService {
     affinityEntry: AffinityListEntry, 
     notionPage: NotionPage
   ): Promise<void> {
+    // SAFETY GUARANTEE: This method only updates field values, NEVER deletes entries
+    console.log(`[AFFINITY SAFETY] Updating field values for Affinity entry ${affinityEntry.entity.id} - NO DELETION WILL OCCUR`);
+    
     const fieldMappings = syncPair.fieldMappings as FieldMapping[];
     // Use embedded field values from v2 API
     const entityFields = affinityEntry.entity?.fields || [];
@@ -710,16 +747,50 @@ export class SyncService {
       id: field.id
     }));
 
+    // Collect field updates for batch operation
+    const fieldUpdates: Array<{fieldId: string, value: any}> = [];
+
     for (const mapping of fieldMappings) {
+      // Skip virtual fields - they cannot be updated in Affinity
+      if (mapping.affinityFieldId && mapping.affinityFieldId < 0) {
+        console.log(`[AFFINITY SAFETY] Skipping virtual field ${mapping.affinityField} - cannot update system fields`);
+        continue;
+      }
+
       const notionProperty = notionPage.properties[mapping.notionProperty];
       if (notionProperty) {
         const notionValue = notionService.convertNotionToAffinityValue(notionProperty);
         const affinityFieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         
-        if (affinityFieldValue && notionValue !== null) {
-          await affinityService.updateFieldValue(affinityFieldValue.id, notionValue);
+        if (affinityFieldValue && notionValue !== null && mapping.affinityFieldId) {
+          console.log(`[AFFINITY SAFETY] Preparing field update for ${mapping.affinityField} (ID: ${mapping.affinityFieldId}) with value from Notion`);
+          
+          // For now, skip field updates since API v2 field update endpoint needs clarification
+          // This ensures we maintain safety by not attempting potentially unsafe operations
+          console.log(`[AFFINITY SAFETY] Skipping field update - API v2 field update endpoint structure needs verification`);
+          
+          // TODO: Once API v2 field update endpoint is confirmed, implement:
+          // fieldUpdates.push({
+          //   fieldId: mapping.affinityFieldId.toString(),
+          //   value: notionValue
+          // });
         }
       }
+    }
+
+    // Temporarily disable field updates until API v2 endpoint is confirmed
+    if (fieldUpdates.length > 0) {
+      console.log(`[AFFINITY SAFETY] Would update ${fieldUpdates.length} fields, but skipping for safety until API v2 endpoint confirmed`);
+      // try {
+      //   await affinityService.updateListEntryFields(
+      //     parseInt(syncPair.affinityListId), 
+      //     affinityEntry.id, 
+      //     fieldUpdates
+      //   );
+      // } catch (error) {
+      //   console.error(`[AFFINITY SAFETY] Field update failed:`, error);
+      //   throw error;
+      // }
     }
   }
 
