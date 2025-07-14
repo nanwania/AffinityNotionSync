@@ -119,7 +119,10 @@ The application is designed to be deployed on Replit with automatic database pro
 - **✅ Organization Object Fix:** Fixed "[object Object]" issue - now properly extracts organization names from complex objects
 - **✅ Location Field Fix:** Resolved empty location fields by removing null value filtering and handling empty rich_text properly
 - **✅ Property Type Correction:** Fixed Location field type from email to rich_text for proper address data handling
+- **✅ Clickable Organization URLs:** Organization fields now display as clickable hyperlinks to company domains (e.g., https://owkin.com, https://klura.com)
 - Enhanced `convertAffinityToNotionProperty()` with smart object parsing for organizations, locations, and complex data structures
+- Organization fields automatically extract domains from Affinity data and create proper URL properties in Notion
+- URL conversion handles arrays, single objects, and direct strings with automatic HTTPS prefix addition
 - All 83 field types now properly sync with correct data representation in Notion
 
 ### July 14, 2025: Organization ID Extraction & Notion Number Field Fix

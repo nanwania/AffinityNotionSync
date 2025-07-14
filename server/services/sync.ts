@@ -736,6 +736,14 @@ export class SyncService {
         const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         if (fieldValue) {
           value = fieldValue.value;
+          
+          // Special handling for organization fields - extract from companies field if it's a virtual organization field
+          if (mapping.affinityField === 'Organizations' && affinityEntry) {
+            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
+            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data)) {
+              value = organizationField.value.data; // Full organization objects with name, id, domain
+            }
+          }
         }
       }
       

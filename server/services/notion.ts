@@ -325,8 +325,35 @@ export class NotionService {
           phone_number: String(affinityValue || '')
         };
       case 'url':
+        let urlValue = affinityValue;
+        
+        // Handle organization arrays: [{"id":123,"name":"Company","domain":"example.com"}]
+        if (Array.isArray(affinityValue) && affinityValue.length > 0) {
+          if (affinityValue[0] && typeof affinityValue[0] === 'object' && affinityValue[0].domain) {
+            // Use the domain from the first organization
+            urlValue = affinityValue[0].domain.startsWith('http') 
+              ? affinityValue[0].domain 
+              : `https://${affinityValue[0].domain}`;
+          } else {
+            urlValue = null;
+          }
+        }
+        // Handle single organization object: {"id":123,"name":"Company","domain":"example.com"}
+        else if (affinityValue && typeof affinityValue === 'object' && affinityValue.domain) {
+          urlValue = affinityValue.domain.startsWith('http') 
+            ? affinityValue.domain 
+            : `https://${affinityValue.domain}`;
+        }
+        // Handle direct URL strings
+        else if (typeof affinityValue === 'string' && affinityValue) {
+          urlValue = affinityValue.startsWith('http') ? affinityValue : `https://${affinityValue}`;
+        }
+        else {
+          urlValue = null;
+        }
+        
         return {
-          url: String(affinityValue || '')
+          url: urlValue
         };
       default:
         return {

@@ -152,8 +152,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
       case 5: // Location/Address
         return "rich_text";
       case 7: // Person
-      case 8: // Organization
         return "relation";
+      case 8: // Organization
+        return "url"; // Organizations should link to their domains
       case 9: // URL
         return "url";
       case 10: // Email
