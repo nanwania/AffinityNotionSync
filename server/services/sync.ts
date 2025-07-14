@@ -172,7 +172,7 @@ export class SyncService {
               // Debug: Log the first entry's field structure to understand the format
               if (entry === affinityEntries[0]) {
                 console.log('DEBUG: First entry entity structure:', JSON.stringify({
-                  entityId: entry.entity_id,
+                  entityId: entry.entity.id,
                   entityType: entry.entity_type,
                   entityFields: entityFields.length > 0 ? entityFields.slice(0, 2) : 'No fields found',
                   statusFieldId: statusField.id,
@@ -238,7 +238,7 @@ export class SyncService {
 
       // Process each Affinity entry
       for (const entry of affinityEntries) {
-        const affinityId = entry.entity_id.toString();
+        const affinityId = entry.entity.id.toString();
         const existingNotionPage = notionPageMap.get(affinityId);
 
         // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
@@ -307,7 +307,7 @@ export class SyncService {
       // Create mapping of Affinity entity IDs to entries
       const affinityEntryMap = new Map<string, AffinityListEntry>();
       affinityEntries.forEach(entry => {
-        affinityEntryMap.set(entry.entity_id.toString(), entry);
+        affinityEntryMap.set(entry.entity.id.toString(), entry);
       });
 
       // Process each Notion page
@@ -403,7 +403,7 @@ export class SyncService {
         if (JSON.stringify(affinityValue) !== JSON.stringify(notionValue)) {
           const conflict: InsertConflict = {
             syncPairId: syncPair.id,
-            recordId: affinityEntry.entity_id.toString(),
+            recordId: affinityEntry.entity.id.toString(),
             recordType: affinityService.getEntityType(affinityEntry.entity),
             fieldName: mapping.affinityField,
             affinityValue: affinityValue,
@@ -442,7 +442,7 @@ export class SyncService {
     // ALWAYS include Affinity ID - this is the primary identifier
     if (affinityEntry) {
       notionProperties['Affinity_ID'] = {
-        rich_text: [{ type: 'text', text: { content: affinityEntry.entity_id.toString() } }]
+        rich_text: [{ type: 'text', text: { content: affinityEntry.entity.id.toString() } }]
       };
     }
 
@@ -482,13 +482,13 @@ export class SyncService {
             value = affinityEntry.entity.name;
             break;
           case -5: // Opportunity ID
-            value = affinityEntry.entity_type === 2 ? affinityEntry.entity_id.toString() : null;
+            value = affinityEntry.entity_type === 2 ? affinityEntry.entity.id.toString() : null;
             break;
           case -6: // Organization Name
             value = affinityEntry.entity_type === 1 ? affinityEntry.entity.name : null;
             break;
           case -7: // Organization ID
-            value = affinityEntry.entity_type === 1 ? affinityEntry.entity_id.toString() : null;
+            value = affinityEntry.entity_type === 1 ? affinityEntry.entity.id.toString() : null;
             break;
         }
       } else {
