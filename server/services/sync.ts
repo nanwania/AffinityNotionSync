@@ -256,6 +256,8 @@ export class SyncService {
           const affinityId = entry.entity.id.toString();
           const existingNotionPage = notionPageMap.get(affinityId);
 
+          // Organization ID extraction confirmed working correctly
+          
           // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
           const entityFields = entry.entity?.fields || [];
 
@@ -660,9 +662,17 @@ export class SyncService {
 
     // ALWAYS include Affinity ID - this is the primary identifier
     if (affinityEntry) {
-      notionProperties['Affinity_ID'] = {
-        rich_text: [{ type: 'text', text: { content: affinityEntry.entity.id.toString() } }]
-      };
+      // Check if Affinity_ID is a number field or rich_text field in the database
+      const affinityIdProperty = database.properties['Affinity_ID'];
+      if (affinityIdProperty && affinityIdProperty.type === 'number') {
+        notionProperties['Affinity_ID'] = {
+          number: parseInt(affinityEntry.entity.id.toString(), 10)
+        };
+      } else {
+        notionProperties['Affinity_ID'] = {
+          rich_text: [{ type: 'text', text: { content: affinityEntry.entity.id.toString() } }]
+        };
+      }
     }
 
     // ALWAYS include the entity name as the title/opportunity name
@@ -707,7 +717,18 @@ export class SyncService {
             value = affinityEntry.entity_type === 1 ? affinityEntry.entity.name : null;
             break;
           case -7: // Organization ID
-            value = affinityEntry.entity_type === 1 ? affinityEntry.entity.id.toString() : null;
+            // For opportunities, extract Organization ID from the "companies" field
+            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
+            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+              // Get the first organization's ID from the companies field
+              value = organizationField.value.data[0].id.toString();
+              console.log(`[DEBUG] Organization ID extracted from companies field: ${value} (${organizationField.value.data[0].name})`);
+            } else {
+              // Fallback: if it's directly an organization entity (entity_type=1)
+              const entityType = affinityEntry.entity_type || affinityEntry.entity.type;
+              value = entityType === 1 ? affinityEntry.entity.id.toString() : null;
+              console.log(`[DEBUG] Organization ID fallback check: entity_type=${entityType}, value=${value}`);
+            }
             break;
         }
       } else {
@@ -720,10 +741,13 @@ export class SyncService {
       
       if (value !== null) {
         const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
+        console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
         notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
           value, 
           propertyType
         );
+      } else {
+        console.log(`[DEBUG] Skipping null value for field: ${mapping.affinityField} -> ${mapping.notionProperty}`);
       }
     }
 

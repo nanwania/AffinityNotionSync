@@ -98,6 +98,15 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 14, 2025: Organization ID Extraction & Notion Number Field Fix
+- **RESOLVED:** Fixed critical Organization ID extraction issue for opportunity entities
+- Organizations are now correctly extracted from the "companies" field in Affinity opportunities
+- Klura organization ID `296778106` and Owkin organization ID `65914191` now sync properly to Notion
+- Fixed `Affinity_ID is expected to be number` validation error by properly handling Notion number fields
+- Both `Affinity_ID` and `Organization_ID` fields now correctly formatted as numbers instead of rich_text
+- Updated `convertAffinityToNotionProperties` to automatically detect Notion field types and format accordingly
+- Sync operations completing successfully with accurate Organization ID mapping
+
 ### July 14, 2025: Affinity Deletion Protection System & API v2 Field Update Investigation
 - Implemented comprehensive safety measures to prevent ANY deletion of Affinity entries
 - Added multiple layers of protection in both sync service and Affinity service

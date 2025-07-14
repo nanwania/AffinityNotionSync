@@ -234,8 +234,12 @@ export class NotionService {
           rich_text: [{ type: 'text', text: { content: String(affinityValue || '') } }]
         };
       case 'number':
+        if (affinityValue === null || affinityValue === undefined || affinityValue === '') {
+          return { number: null };
+        }
+        const num = typeof affinityValue === 'string' ? parseInt(affinityValue, 10) : Number(affinityValue);
         return {
-          number: Number(affinityValue) || null
+          number: isNaN(num) ? null : num
         };
       case 'select':
         let selectValue = affinityValue;
