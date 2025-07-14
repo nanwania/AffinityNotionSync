@@ -23,6 +23,16 @@ export interface FieldMapping {
 export class SyncService {
   private activeSyncs = new Set<number>();
   private scheduledJobs = new Map<number, cron.ScheduledTask>();
+  
+  // Clear stuck sync processes
+  clearActiveSyncs(): void {
+    this.activeSyncs.clear();
+  }
+
+  // Get the count of currently running syncs
+  getActiveSyncCount(): number {
+    return this.activeSyncs.size;
+  }
 
   async startScheduledSync(syncPair: SyncPair): Promise<void> {
     // Stop existing job if it exists
@@ -147,26 +157,54 @@ export class SyncService {
           .then(fields => fields.find(f => f.name.toLowerCase() === 'status'));
         
         if (statusField) {
+          console.log(`Status filtering enabled. Field: ${statusField.name} (ID: ${statusField.id})`);
+          console.log(`Target status filters: [${syncPair.statusFilters.join(', ')}]`);
+          
           const originalCount = affinityEntries.length;
           const filteredEntries = [];
+          const statusCounts: Record<string, number> = {};
+          
           for (const entry of affinityEntries) {
             try {
               const fieldValues = await affinityService.getFieldValues(entry.entity_id, affinityService.getEntityType(entry.entity));
               const statusValue = fieldValues.find(fv => fv.field_id === statusField.id);
               
-              if (statusValue && statusValue.value && syncPair.statusFilters.includes(statusValue.value)) {
+              // Handle both string and object status values
+              let statusText = 'No Status';
+              let statusMatch = false;
+              
+              if (statusValue && statusValue.value) {
+                if (typeof statusValue.value === 'string') {
+                  statusText = statusValue.value;
+                  statusMatch = syncPair.statusFilters.includes(statusValue.value);
+                } else if (typeof statusValue.value === 'object' && statusValue.value.text) {
+                  // Affinity dropdown values are objects with a 'text' property
+                  statusText = statusValue.value.text;
+                  statusMatch = syncPair.statusFilters.includes(statusValue.value.text);
+                }
+              }
+              
+              statusCounts[statusText] = (statusCounts[statusText] || 0) + 1;
+              
+              if (statusMatch) {
                 filteredEntries.push(entry);
               }
             } catch (error) {
               // If we can't get field values, skip this entry
               console.warn(`Could not get field values for entry ${entry.id}:`, error);
+              statusCounts['Error fetching status'] = (statusCounts['Error fetching status'] || 0) + 1;
             }
           }
+          
+          console.log(`Status distribution in ${originalCount} entries:`, statusCounts);
+          console.log(`Filtered to ${filteredEntries.length} entries matching status filters`);
+          
           affinityEntries = filteredEntries;
           details.statusFiltering = {
             originalEntries: originalCount,
             filteredEntries: filteredEntries.length,
-            statusFilters: syncPair.statusFilters
+            statusFilters: syncPair.statusFilters,
+            statusCounts
           };
         }
       }
@@ -193,13 +231,8 @@ export class SyncService {
         const entityType = affinityService.getEntityType(entry.entity);
         const fieldValues = await affinityService.getFieldValues(entry.entity_id, entityType);
 
-        // Convert field values to Notion properties
+        // Convert field values to Notion properties (includes Affinity ID automatically)
         const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
-        
-        // Add Affinity ID to properties for tracking
-        notionProperties['Affinity_ID'] = {
-          rich_text: [{ type: 'text', text: { content: affinityId } }]
-        };
 
         if (existingNotionPage) {
           // Check for conflicts
@@ -386,6 +419,30 @@ export class SyncService {
     const notionProperties: Record<string, any> = {};
     const database = await notionService.getDatabase(notionDatabaseId);
 
+    // ALWAYS include Affinity ID - this is the primary identifier
+    if (affinityEntry) {
+      notionProperties['Affinity_ID'] = {
+        rich_text: [{ type: 'text', text: { content: affinityEntry.entity_id.toString() } }]
+      };
+    }
+
+    // ALWAYS include the entity name as the title/opportunity name
+    if (affinityEntry) {
+      // Check if there's a Name property in the database
+      if (database.properties['Name']) {
+        notionProperties['Name'] = {
+          title: [{ type: 'text', text: { content: affinityEntry.entity.name || 'Untitled' } }]
+        };
+      }
+      // Check for other common title field names
+      if (database.properties['Opportunity Name']) {
+        notionProperties['Opportunity Name'] = {
+          title: [{ type: 'text', text: { content: affinityEntry.entity.name || 'Untitled' } }]
+        };
+      }
+    }
+
+    // Process user-defined field mappings
     for (const mapping of fieldMappings) {
       let value = null;
       

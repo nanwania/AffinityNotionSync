@@ -84,6 +84,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Clear stuck sync processes
+  app.post('/api/sync/clear-active', async (req, res) => {
+    try {
+      syncService.clearActiveSyncs();
+      res.json({ success: true, message: 'Cleared all active syncs' });
+    } catch (error) {
+      console.error('Clear active syncs error:', error);
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    }
+  });
+
   // Sync history
   app.get("/api/sync-history", async (req, res) => {
     try {
@@ -343,7 +356,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pendingConflicts = await storage.getPendingConflicts();
       const recentHistory = await storage.getSyncHistory();
       
-      const activeSyncs = syncPairs.filter(sp => sp.isActive).length;
+      // Get actual running syncs count from sync service
+      const activeSyncs = syncService.getActiveSyncCount();
       const lastSync = recentHistory.length > 0 ? recentHistory[0].createdAt : null;
       const totalRecordsSynced = recentHistory.reduce((sum, h) => sum + h.recordsUpdated + h.recordsCreated, 0);
       
