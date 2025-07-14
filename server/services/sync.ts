@@ -166,22 +166,35 @@ export class SyncService {
           
           for (const entry of affinityEntries) {
             try {
-              // For v2 API, get field values using list entry ID
-              const fieldValues = await affinityService.getListEntryFieldValues(parseInt(syncPair.affinityListId), entry.id);
-              const statusValue = fieldValues.find(fv => fv.field_id === statusField.id);
+              // For v2 API, field values are embedded in entry.entity.fields
+              const entityFields = entry.entity?.fields || [];
               
-              // Handle both string and object status values
+              // Debug: Log the first entry's field structure to understand the format
+              if (entry === affinityEntries[0]) {
+                console.log('DEBUG: First entry entity structure:', JSON.stringify({
+                  entityId: entry.entity_id,
+                  entityType: entry.entity_type,
+                  entityFields: entityFields.length > 0 ? entityFields.slice(0, 2) : 'No fields found',
+                  statusFieldId: statusField.id,
+                  lookingFor: [`field-${statusField.id}`, statusField.id.toString()]
+                }, null, 2));
+              }
+              
+              const statusField_v2 = entityFields.find(f => f.id === `field-${statusField.id}` || f.id === statusField.id.toString());
+              
+              // Handle both string and object status values from v2 API
               let statusText = 'No Status';
               let statusMatch = false;
               
-              if (statusValue && statusValue.value) {
-                if (typeof statusValue.value === 'string') {
-                  statusText = statusValue.value;
-                  statusMatch = syncPair.statusFilters.includes(statusValue.value);
-                } else if (typeof statusValue.value === 'object' && statusValue.value.text) {
+              if (statusField_v2 && statusField_v2.value && statusField_v2.value.data) {
+                const fieldValue = statusField_v2.value.data;
+                if (typeof fieldValue === 'string') {
+                  statusText = fieldValue;
+                  statusMatch = syncPair.statusFilters.includes(fieldValue);
+                } else if (typeof fieldValue === 'object' && fieldValue.text) {
                   // Affinity dropdown values are objects with a 'text' property
-                  statusText = statusValue.value.text;
-                  statusMatch = syncPair.statusFilters.includes(statusValue.value.text);
+                  statusText = fieldValue.text;
+                  statusMatch = syncPair.statusFilters.includes(fieldValue.text);
                 }
               }
               
@@ -228,8 +241,13 @@ export class SyncService {
         const affinityId = entry.entity_id.toString();
         const existingNotionPage = notionPageMap.get(affinityId);
 
-        // Get field values for this list entry (v2 API method)
-        const fieldValues = await affinityService.getListEntryFieldValues(parseInt(syncPair.affinityListId), entry.id);
+        // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
+        const entityFields = entry.entity?.fields || [];
+        const fieldValues = entityFields.map(field => ({
+          field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+          value: field.value?.data,
+          id: field.id
+        }));
 
         // Convert field values to Notion properties (includes Affinity ID automatically)
         const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
@@ -299,11 +317,13 @@ export class SyncService {
 
         const existingAffinityEntry = affinityEntryMap.get(affinityId);
         if (existingAffinityEntry) {
-          // Check for conflicts - get field values using v2 API
-          const fieldValues = await affinityService.getListEntryFieldValues(
-            parseInt(syncPair.affinityListId), 
-            existingAffinityEntry.id
-          );
+          // Check for conflicts - use embedded field values from v2 API
+          const entityFields = existingAffinityEntry.entity?.fields || [];
+          const fieldValues = entityFields.map(field => ({
+            field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+            value: field.value?.data,
+            id: field.id
+          }));
           
           const conflicts = await this.detectConflicts(syncPair, existingAffinityEntry, page, fieldValues);
           if (conflicts.length > 0) {
@@ -497,10 +517,13 @@ export class SyncService {
     notionPage: NotionPage
   ): Promise<void> {
     const fieldMappings = syncPair.fieldMappings as FieldMapping[];
-    const fieldValues = await affinityService.getListEntryFieldValues(
-      parseInt(syncPair.affinityListId), 
-      affinityEntry.id
-    );
+    // Use embedded field values from v2 API
+    const entityFields = affinityEntry.entity?.fields || [];
+    const fieldValues = entityFields.map(field => ({
+      field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+      value: field.value?.data,
+      id: field.id
+    }));
 
     for (const mapping of fieldMappings) {
       const notionProperty = notionPage.properties[mapping.notionProperty];

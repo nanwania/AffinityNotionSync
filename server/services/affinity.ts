@@ -109,7 +109,13 @@ export class AffinityService {
     const response = await this.client.get(`/v2/lists/${listId}/list-entries`, { params });
     
     console.log(`API v2 Response: Got ${(response.data.data || []).length} entries`);
-    console.log('Next URL:', response.data.nextUrl);
+    console.log('Response structure:', {
+      dataLength: response.data.data?.length,
+      nextUrl: response.data.nextUrl,
+      hasMore: response.data.hasMore,
+      fullResponseKeys: Object.keys(response.data),
+      pagination: response.data.pagination
+    });
     
     // Debug: Log first entry structure to understand v2 response format
     if (response.data.data && response.data.data.length > 0) {
@@ -118,7 +124,7 @@ export class AffinityService {
     
     return {
       entries: response.data.data || [],
-      nextUrl: response.data.nextUrl
+      nextUrl: response.data.pagination?.nextUrl
     };
   }
 
@@ -132,25 +138,44 @@ export class AffinityService {
     do {
       pageCount++;
       
-      let cursor: string | undefined;
+      let result;
       if (nextUrl) {
-        // Extract cursor from nextUrl
+        // Use the full nextUrl directly for pagination
+        console.log(`Fetching page ${pageCount} using nextUrl: ${nextUrl.substring(0, 80)}...`);
+        
+        // Parse the nextUrl to get the path and params
         const url = new URL(nextUrl);
-        cursor = url.searchParams.get('cursor') || undefined;
-        console.log(`Fetching page ${pageCount} with cursor: ${cursor?.substring(0, 20)}...`);
+        const response = await this.client.get(url.pathname + url.search);
+        
+        console.log(`API v2 Response (page ${pageCount}): Got ${(response.data.data || []).length} entries`);
+        console.log('Response pagination:', {
+          hasNextUrl: !!response.data.pagination?.nextUrl,
+          nextUrlPreview: response.data.pagination?.nextUrl?.substring(0, 60)
+        });
+        
+        result = {
+          entries: response.data.data || [],
+          nextUrl: response.data.pagination?.nextUrl
+        };
       } else {
         console.log(`Fetching page ${pageCount} (first page)`);
+        result = await this.getListEntries(listId);
       }
       
-      const result = await this.getListEntries(listId, cursor);
       allEntries.push(...result.entries);
       nextUrl = result.nextUrl;
       
       console.log(`Page ${pageCount}: Got ${result.entries.length} entries. Total so far: ${allEntries.length}`);
+      console.log('Next URL debug:', { 
+        hasNextUrl: !!nextUrl, 
+        nextUrlLength: nextUrl?.length,
+        nextUrlPreview: nextUrl?.substring(0, 100)
+      });
+      
       if (nextUrl) {
-        console.log(`Next URL available: ${nextUrl.substring(0, 60)}...`);
+        console.log(`Next URL available for page ${pageCount + 1}: ${nextUrl.substring(0, 100)}...`);
       } else {
-        console.log('No more pages available');
+        console.log('No more pages available - pagination complete');
       }
     } while (nextUrl);
 
