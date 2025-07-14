@@ -205,8 +205,9 @@ export class SyncService {
 
           // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
           const entityFields = entry.entity?.fields || [];
+
           const fieldValues = entityFields.map(field => ({
-            field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+            field_id: field.id, // Keep original field ID for proper matching
             value: field.value?.data,
             id: field.id
           }));
@@ -622,7 +623,7 @@ export class SyncService {
     // Use embedded field values from v2 API
     const entityFields = affinityEntry.entity?.fields || [];
     const fieldValues = entityFields.map(field => ({
-      field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+      field_id: field.id, // Keep original field ID for proper matching
       value: field.value?.data,
       id: field.id
     }));

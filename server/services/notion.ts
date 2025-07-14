@@ -238,13 +238,27 @@ export class NotionService {
           number: Number(affinityValue) || null
         };
       case 'select':
+        let selectValue = affinityValue;
+        // Handle Affinity dropdown format: { dropdownOptionId: X, text: "Option Text" }
+        if (typeof affinityValue === 'object' && affinityValue.text) {
+          selectValue = affinityValue.text;
+        } else if (Array.isArray(affinityValue) && affinityValue.length > 0 && affinityValue[0].text) {
+          selectValue = affinityValue[0].text; // Take first option for single select
+        }
         return {
-          select: affinityValue ? { name: String(affinityValue) } : null
+          select: selectValue ? { name: String(selectValue) } : null
         };
       case 'multi_select':
-        const values = Array.isArray(affinityValue) ? affinityValue : [affinityValue];
+        let values = Array.isArray(affinityValue) ? affinityValue : [affinityValue];
+        // Handle Affinity dropdown format: [{ dropdownOptionId: X, text: "Option Text" }]
+        values = values.filter(v => v).map(v => {
+          if (typeof v === 'object' && v.text) {
+            return v.text; // Extract text from dropdown object
+          }
+          return String(v);
+        });
         return {
-          multi_select: values.filter(v => v).map(v => ({ name: String(v) }))
+          multi_select: values.map(v => ({ name: v }))
         };
       case 'date':
         return {
