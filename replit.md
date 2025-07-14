@@ -98,6 +98,14 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 14, 2025: Field Mapping Data Conversion Fix
+- Fixed critical issue with Affinity field values not syncing to Notion properly
+- Updated `convertAffinityToNotionProperty` function in Notion service to handle Affinity dropdown format
+- Affinity multi-select dropdowns now properly extract text values from `{dropdownOptionId: X, text: "Value"}` format
+- Single-select dropdowns also handle the same object format correctly
+- Field mappings like "Upcoming Round" now sync actual values ("Series A", "Carve Out") instead of "[object Object]"
+- Multi-select properties in Notion now show correct option names and values
+
 ### July 14, 2025: Performance Optimization & Intelligent Conflict Resolution
 - Successfully converted all API calls to Affinity API v2 with Bearer token authentication
 - Fixed major pagination issue: Now correctly fetches all 701 entries across 8 pages instead of just 100
