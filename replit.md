@@ -98,7 +98,17 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
-### July 14, 2025: Status Filtering Implementation
+### July 14, 2025: Affinity API v2 Conversion & Pagination Fix
+- Successfully converted all API calls to Affinity API v2 with Bearer token authentication
+- Fixed major pagination issue: Now correctly fetches all 701 entries across 8 pages instead of just 100
+- Updated pagination logic to use `response.data.pagination.nextUrl` instead of `response.data.nextUrl`
+- Implemented proper cursor-based pagination for accessing all 700+ entries in Affinity lists
+- Updated field data extraction to use embedded v2 API structure from `entry.entity.fields[]`
+- Field values now accessed directly from embedded response instead of separate API calls
+- Status filtering updated to work with v2 field format: `field.value.data.text`
+- Eliminated all deprecated v1 API calls throughout the codebase
+
+### Previous: Status Filtering Implementation
 - Added status filtering capability to sync pairs
 - Users can now select specific statuses from Affinity lists to sync (e.g., "Deep Diligence", "Early Diligence")
 - Updated database schema to include `statusFilters` field in sync pairs table
