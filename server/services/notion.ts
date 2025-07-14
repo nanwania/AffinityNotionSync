@@ -285,7 +285,15 @@ export class NotionService {
                 text: { 
                   content: org.name,
                   link: { url: url }
-                } 
+                },
+                annotations: {
+                  bold: false,
+                  italic: false,
+                  strikethrough: false,
+                  underline: false,
+                  code: false,
+                  color: "default"
+                }
               }]
             };
           }
@@ -299,7 +307,15 @@ export class NotionService {
               text: { 
                 content: affinityValue.name,
                 link: { url: url }
-              } 
+              },
+              annotations: {
+                bold: false,
+                italic: false,
+                strikethrough: false,
+                underline: false,
+                code: false,
+                color: "default"
+              }
             }]
           };
         }
