@@ -217,6 +217,13 @@ export class SyncService {
           console.log(`Status distribution in ${originalCount} entries:`, statusCounts);
           console.log(`Filtered to ${filteredEntries.length} entries matching status filters`);
           
+          // Debug: Show which entries are being included/excluded
+          console.log(`Target status filters: [${syncPair.statusFilters.join(', ')}]`);
+          const includedStatuses = Object.keys(statusCounts).filter(status => syncPair.statusFilters.includes(status));
+          const excludedStatuses = Object.keys(statusCounts).filter(status => !syncPair.statusFilters.includes(status));
+          console.log(`Included statuses and counts:`, includedStatuses.map(s => `${s}: ${statusCounts[s]}`));
+          console.log(`Excluded statuses and counts:`, excludedStatuses.map(s => `${s}: ${statusCounts[s]}`));
+          
           affinityEntries = filteredEntries;
           details.statusFiltering = {
             originalEntries: originalCount,
@@ -229,16 +236,25 @@ export class SyncService {
       
       // Get Notion database pages
       const notionPages = await notionService.queryDatabase(syncPair.notionDatabaseId);
+      console.log(`Found ${notionPages.length} total pages in Notion database`);
       
       // Create mapping of Affinity entity IDs to Notion pages
       const notionPageMap = new Map<string, NotionPage>();
+      let pagesWithAffinityId = 0;
+      let pagesWithoutAffinityId = 0;
+      
       notionPages.forEach(page => {
         // Try to find Affinity ID in page properties
         const affinityId = this.extractAffinityIdFromNotionPage(page);
         if (affinityId) {
           notionPageMap.set(affinityId, page);
+          pagesWithAffinityId++;
+        } else {
+          pagesWithoutAffinityId++;
         }
       });
+      
+      console.log(`Notion pages breakdown: ${pagesWithAffinityId} with Affinity ID, ${pagesWithoutAffinityId} without Affinity ID`);
 
       // Process each Affinity entry
       for (const entry of affinityEntries) {
