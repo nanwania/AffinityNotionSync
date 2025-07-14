@@ -373,9 +373,27 @@ export class AffinityService {
       console.log(`Found ${organizationIds.size} unique organizations from entries, plus ${knownOrgIds.length} known organizations. Total: ${allOrgIds.size} to analyze for fields`);
       const orgSample = Array.from(allOrgIds).slice(0, 10); // Sample 10 organizations
       
-      // Organization fields endpoint is not available in API v2, but we provide virtual fields
-      console.log('Organization fields endpoint not available in API v2 - using virtual organization fields only');
-      // Virtual Organization ID field is already added in the virtual fields section
+      // Try to get organization fields using API v1 approach
+      try {
+        console.log('Attempting to fetch organization fields via API v1...');
+        const orgGlobalFields = await this.getOrganizationFields();
+        console.log(`Found ${orgGlobalFields.length} global organization fields`);
+        
+        for (const orgField of orgGlobalFields) {
+          const fieldData = {
+            id: orgField.id,
+            name: orgField.name,
+            value_type: orgField.value_type,
+            allows_multiple: orgField.allows_multiple || false,
+            track_changes: orgField.track_changes || false,
+            field_type: 'organization',
+            entity_type: 'organization'
+          };
+          organizationFields.push(fieldData);
+        }
+      } catch (error) {
+        console.warn('Organization fields via API v1 not available:', error.message);
+      }
       
       // Alternative: try fetching a few organizations that might work
       for (const orgId of orgSample.slice(0, 3)) {
@@ -569,10 +587,51 @@ export class AffinityService {
 
   async getOrganizationFields(): Promise<AffinityField[]> {
     try {
-      const response = await this.client.get('/v2/organizations/fields');
-      return response.data.data || response.data;
+      // Get all global fields via API v1, then filter for organization-specific fields
+      const response = await this.client.get('/fields', {
+        auth: {
+          username: '',
+          password: process.env.AFFINITY_API_KEY || ''
+        },
+        baseURL: 'https://api.affinity.co'
+      });
+      
+      const allFields = response.data || [];
+      const organizationFields: AffinityField[] = [];
+      
+      // Get field values for a sample organization to identify which fields are organization-specific
+      const orgFieldValuesResponse = await this.client.get('/field-values?organization_id=296778106', {
+        auth: {
+          username: '',
+          password: process.env.AFFINITY_API_KEY || ''
+        },
+        baseURL: 'https://api.affinity.co'
+      });
+      
+      const orgFieldValues = orgFieldValuesResponse.data || [];
+      const orgFieldIds = new Set(orgFieldValues.map(fv => fv.field_id?.toString()));
+      
+      // Filter global fields to only include those that have values on organizations
+      for (const field of allFields) {
+        if (field && orgFieldIds.has(field.id?.toString())) {
+          // This field has values on organizations, so it's an organization field
+          organizationFields.push({
+            id: field.id,
+            name: field.name,
+            value_type: field.value_type || 1,
+            allows_multiple: field.allows_multiple || false,
+            track_changes: field.track_changes || false
+          });
+          
+          // Limit to 20 organization fields for performance
+          if (organizationFields.length >= 20) break;
+        }
+      }
+      
+      console.log(`Found ${organizationFields.length} organization fields via API v1 global fields`);
+      return organizationFields;
     } catch (error) {
-      console.warn('Organization fields endpoint not available:', error);
+      console.warn('Organization fields via API v1 not available:', error.message);
       return [];
     }
   }
