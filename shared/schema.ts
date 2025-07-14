@@ -32,6 +32,7 @@ export const syncHistory = pgTable("sync_history", {
   status: text("status").notNull(), // success, error, warning
   recordsUpdated: integer("records_updated").notNull().default(0),
   recordsCreated: integer("records_created").notNull().default(0),
+  recordsDeleted: integer("records_deleted").notNull().default(0),
   conflictsFound: integer("conflicts_found").notNull().default(0),
   duration: integer("duration"), // milliseconds
   errorMessage: text("error_message"),

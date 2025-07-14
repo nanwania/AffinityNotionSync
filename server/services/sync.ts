@@ -8,6 +8,7 @@ export interface SyncResult {
   success: boolean;
   recordsUpdated: number;
   recordsCreated: number;
+  recordsDeleted: number;
   conflictsFound: number;
   duration: number;
   errorMessage?: string;
@@ -104,6 +105,7 @@ export class SyncService {
         status: result.success ? (result.conflictsFound > 0 ? 'warning' : 'success') : 'error',
         recordsUpdated: result.recordsUpdated,
         recordsCreated: result.recordsCreated,
+        recordsDeleted: result.recordsDeleted,
         conflictsFound: result.conflictsFound,
         duration: result.duration,
         errorMessage: result.errorMessage,
@@ -127,6 +129,7 @@ export class SyncService {
         status: 'error',
         recordsUpdated: 0,
         recordsCreated: 0,
+        recordsDeleted: 0,
         conflictsFound: 0,
         duration: result.duration,
         errorMessage: result.errorMessage,
@@ -143,6 +146,7 @@ export class SyncService {
     const startTime = Date.now();
     let recordsUpdated = 0;
     let recordsCreated = 0;
+    let recordsDeleted = 0;
     let conflictsFound = 0;
     const details: any = {};
 
@@ -270,19 +274,59 @@ export class SyncService {
         }
       }
 
+      // Clean up Notion pages that no longer match the status filters
+      if (syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0) {
+        console.log('Checking for Notion pages to delete that no longer match status filters...');
+        
+        // Create set of current Affinity entity IDs (filtered entries)
+        const currentAffinityIds = new Set(affinityEntries.map(entry => entry.entity.id.toString()));
+        
+        // Find Notion pages that have Affinity IDs but are NOT in current filtered set
+        const pagesToDelete = [];
+        for (const [affinityId, notionPage] of notionPageMap) {
+          if (!currentAffinityIds.has(affinityId)) {
+            pagesToDelete.push({ affinityId, notionPage });
+          }
+        }
+        
+        console.log(`Found ${pagesToDelete.length} Notion pages to delete (no longer match status filters)`);
+        
+        // Delete the pages
+        for (const { affinityId, notionPage } of pagesToDelete) {
+          try {
+            console.log(`Deleting Notion page for Affinity ID ${affinityId}: ${notionPage.id}`);
+            await notionService.deletePage(notionPage.id);
+            recordsDeleted++;
+          } catch (error) {
+            console.error(`Failed to delete Notion page ${notionPage.id} for Affinity ID ${affinityId}:`, error);
+          }
+        }
+        
+        details.cleanup = {
+          pagesToDelete: pagesToDelete.length,
+          deletedPages: recordsDeleted
+        };
+      }
+
       return {
         success: true,
         recordsUpdated,
         recordsCreated,
+        recordsDeleted,
         conflictsFound,
         duration: Date.now() - startTime,
-        details: { affinityEntries: affinityEntries.length, notionPages: notionPages.length }
+        details: { 
+          affinityEntries: affinityEntries.length, 
+          notionPages: notionPages.length,
+          ...details 
+        }
       };
     } catch (error) {
       return {
         success: false,
         recordsUpdated,
         recordsCreated,
+        recordsDeleted,
         conflictsFound,
         duration: Date.now() - startTime,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -295,6 +339,7 @@ export class SyncService {
     const startTime = Date.now();
     let recordsUpdated = 0;
     let recordsCreated = 0;
+    let recordsDeleted = 0;
     let conflictsFound = 0;
 
     try {
@@ -342,6 +387,7 @@ export class SyncService {
         success: true,
         recordsUpdated,
         recordsCreated,
+        recordsDeleted,
         conflictsFound,
         duration: Date.now() - startTime,
         details: { notionPages: notionPages.length, affinityEntries: affinityEntries.length }
@@ -351,6 +397,7 @@ export class SyncService {
         success: false,
         recordsUpdated,
         recordsCreated,
+        recordsDeleted,
         conflictsFound,
         duration: Date.now() - startTime,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -372,6 +419,7 @@ export class SyncService {
       success: affinityToNotionResult.success && notionToAffinityResult.success,
       recordsUpdated: affinityToNotionResult.recordsUpdated + notionToAffinityResult.recordsUpdated,
       recordsCreated: affinityToNotionResult.recordsCreated + notionToAffinityResult.recordsCreated,
+      recordsDeleted: affinityToNotionResult.recordsDeleted + notionToAffinityResult.recordsDeleted,
       conflictsFound: affinityToNotionResult.conflictsFound + notionToAffinityResult.conflictsFound,
       duration: Date.now() - startTime,
       errorMessage: affinityToNotionResult.errorMessage || notionToAffinityResult.errorMessage,
