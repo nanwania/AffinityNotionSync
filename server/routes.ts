@@ -283,6 +283,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/affinity/lists/:id/status-options", async (req, res) => {
+    try {
+      const listId = parseInt(req.params.id);
+      
+      // Get all entries for the list to extract unique status values
+      const entries = await affinityService.getAllListEntries(listId);
+      
+      // Find the status field first
+      const fields = await affinityService.getFields(listId);
+      const statusField = fields.find(field => field.name.toLowerCase() === 'status');
+      
+      if (!statusField) {
+        return res.json([]);
+      }
+      
+      // Extract unique status values from entries
+      const statusValues = new Set<string>();
+      
+      for (const entry of entries) {
+        if (entry.entity && entry.entity.fields) {
+          const statusFieldData = entry.entity.fields.find((field: any) => field.id === statusField.id);
+          if (statusFieldData && statusFieldData.value && statusFieldData.value.data && statusFieldData.value.data.text) {
+            statusValues.add(statusFieldData.value.data.text);
+          }
+        }
+      }
+      
+      // Convert to array and sort
+      const uniqueStatusOptions = Array.from(statusValues).sort().map((text, index) => ({
+        id: `status-${index}`,
+        text: text
+      }));
+      
+      res.json(uniqueStatusOptions);
+    } catch (error: any) {
+      console.error("Error fetching status options:", error.message);
+      res.status(500).json({ error: "Failed to fetch status options" });
+    }
+  });
+
   app.get("/api/affinity/rate-limit", async (req, res) => {
     try {
       const rateLimit = await affinityService.getRateLimit();

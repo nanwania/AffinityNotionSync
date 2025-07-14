@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { Eye, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { SyncHistory } from "@shared/schema";
 
@@ -10,9 +12,17 @@ interface SyncHistoryTableProps {
 }
 
 export function SyncHistoryTable({ syncPairId }: SyncHistoryTableProps) {
+  const [selectedHistory, setSelectedHistory] = useState<SyncHistory | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
   const { data: syncHistory = [], isLoading } = useQuery<SyncHistory[]>({
     queryKey: ["/api/sync-history", syncPairId],
   });
+
+  const handleViewDetails = (entry: SyncHistory) => {
+    setSelectedHistory(entry);
+    setIsDetailsOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -111,7 +121,11 @@ export function SyncHistoryTable({ syncPairId }: SyncHistoryTableProps) {
                     {formatDuration(entry.duration)}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleViewDetails(entry)}
+                    >
                       <Eye className="h-4 w-4 mr-1" />
                       View Details
                     </Button>
@@ -122,6 +136,73 @@ export function SyncHistoryTable({ syncPairId }: SyncHistoryTableProps) {
           </TableBody>
         </Table>
       </div>
+
+      {/* Details Modal */}
+      <Modal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        title="Sync Details"
+      >
+        {selectedHistory && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Status</label>
+                <div className="mt-1">{getStatusBadge(selectedHistory.status)}</div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Duration</label>
+                <p className="mt-1 text-sm">{formatDuration(selectedHistory.duration)}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Records Updated</label>
+                <p className="mt-1 text-sm">{selectedHistory.recordsUpdated}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Records Created</label>
+                <p className="mt-1 text-sm">{selectedHistory.recordsCreated}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Conflicts Found</label>
+                <p className="mt-1 text-sm">{selectedHistory.conflictsFound}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Timestamp</label>
+                <p className="mt-1 text-sm">{formatDate(selectedHistory.createdAt)}</p>
+              </div>
+            </div>
+
+            {selectedHistory.errorMessage && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Error Message</label>
+                <div className="mt-1 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-700">{selectedHistory.errorMessage}</p>
+                </div>
+              </div>
+            )}
+
+            {selectedHistory.details && (
+              <div>
+                <label className="text-sm font-medium text-gray-500">Details</label>
+                <div className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap overflow-auto max-h-60">
+                    {typeof selectedHistory.details === 'string' 
+                      ? selectedHistory.details 
+                      : JSON.stringify(selectedHistory.details, null, 2)
+                    }
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end pt-4">
+              <Button onClick={() => setIsDetailsOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -66,6 +66,11 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     enabled: !!formData.notionDatabaseId,
   });
 
+  const { data: statusOptions } = useQuery<any[]>({
+    queryKey: ["/api/affinity/lists", formData.affinityListId, "status-options"],
+    enabled: !!formData.affinityListId,
+  });
+
   useEffect(() => {
     if (syncPair) {
       setFormData({
@@ -156,10 +161,6 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
   };
 
   const notionProperties = notionDatabase?.properties ? Object.keys(notionDatabase.properties) : [];
-  
-  // Get status field and its options from Affinity fields
-  const statusField = affinityFields?.find(field => field.name.toLowerCase() === 'status');
-  const statusOptions = statusField?.dropdown_options || [];
 
   const handleStatusToggle = (statusName: string) => {
     setStatusFilters(prev => 
@@ -279,14 +280,14 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
               </div>
 
               {/* Status Filtering */}
-              {statusOptions.length > 0 && (
+              {statusOptions && statusOptions.length > 0 && (
                 <div>
                   <Label>Status Filter</Label>
                   <p className="text-sm text-gray-500 mb-2">
                     Select which statuses to sync. Leave empty to sync all.
                   </p>
                   <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    {statusOptions.map((option: any) => (
+                    {statusOptions?.map((option: any) => (
                       <div key={option.id} className="flex items-center space-x-2">
                         <input
                           type="checkbox"
