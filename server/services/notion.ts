@@ -42,41 +42,45 @@ export const NOTION_PAGE_ID = extractPageIdFromUrl(process.env.NOTION_PAGE_URL!)
 
 export class NotionService {
   async getNotionDatabases(): Promise<NotionDatabase[]> {
-    const childDatabases: NotionDatabase[] = [];
+    const allDatabases: NotionDatabase[] = [];
 
     try {
+      // Get databases using the search API (which is working)
       let hasMore = true;
       let startCursor: string | undefined = undefined;
 
       while (hasMore) {
-        const response = await notion.blocks.children.list({
-          block_id: NOTION_PAGE_ID,
+        const searchResponse = await notion.search({
+          filter: {
+            value: "database",
+            property: "object"
+          },
           start_cursor: startCursor,
         });
 
-        for (const block of response.results) {
-          if (block.type === "child_database") {
-            const databaseId = block.id;
-
-            try {
-              const databaseInfo = await notion.databases.retrieve({
-                database_id: databaseId,
-              });
-
-              childDatabases.push(databaseInfo as NotionDatabase);
-            } catch (error) {
-              console.error(`Error retrieving database ${databaseId}:`, error);
-            }
+        for (const result of searchResponse.results) {
+          if (result.object === "database") {
+            allDatabases.push(result as NotionDatabase);
           }
         }
 
-        hasMore = response.has_more;
-        startCursor = response.next_cursor || undefined;
+        hasMore = searchResponse.has_more;
+        startCursor = searchResponse.next_cursor || undefined;
       }
 
-      return childDatabases;
-    } catch (error) {
-      console.error("Error listing child databases:", error);
+      console.log(`Found ${allDatabases.length} databases`);
+      return allDatabases;
+    } catch (error: any) {
+      console.error("Error listing databases:", error);
+      console.error("Error details:", error.message);
+      
+      // Check if it's an authentication or permission error
+      if (error.code === 'unauthorized' || error.status === 401) {
+        console.error("Authentication failed - check NOTION_INTEGRATION_SECRET");
+      } else if (error.code === 'restricted_resource' || error.status === 403) {
+        console.error("Permission denied - integration may not have access to databases");
+      }
+      
       throw error;
     }
   }

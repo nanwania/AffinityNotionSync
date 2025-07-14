@@ -191,6 +191,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/notion/test-database", async (req, res) => {
+    try {
+      const testDb = await notionService.createDatabaseIfNotExists('Test Sync Database', {
+        Name: { title: {} },
+        Email: { email: {} },
+        Status: { 
+          select: { 
+            options: [
+              { name: "Active", color: "green" },
+              { name: "Inactive", color: "red" }
+            ]
+          }
+        }
+      });
+      res.json(testDb);
+    } catch (error: any) {
+      console.error('Error creating test database:', error);
+      res.status(500).json({ error: 'Failed to create test database', details: error.message });
+    }
+  });
+
   // Dashboard stats
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
