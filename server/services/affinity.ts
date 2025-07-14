@@ -234,23 +234,125 @@ export class AffinityService {
     opportunityFields: AffinityField[];
   }> {
     try {
-      // Fetch global fields (no specific entity type)
-      const globalFields = await this.getFields();
+      if (!listId) {
+        return {
+          globalFields: [],
+          listFields: [],
+          personFields: [],
+          organizationFields: [],
+          opportunityFields: []
+        };
+      }
+
+      // Get all fields available for this list  
+      const allListFields = await this.getFields(listId);
+      console.log(`Found ${allListFields.length} total fields for list ${listId}`);
       
-      // Fetch list-specific fields if listId provided
-      let listFields: AffinityField[] = [];
-      if (listId) {
-        listFields = await this.getFields(listId);
+      // Categorize fields based on their actual structure from the Affinity API
+      const listFields: AffinityField[] = [];
+      const personFields: AffinityField[] = [];
+      const organizationFields: AffinityField[] = [];
+      const opportunityFields: AffinityField[] = [];
+      const globalFields: AffinityField[] = [];
+      
+      for (const field of allListFields) {
+        // Skip virtual fields (negative IDs) - they're handled separately
+        if (typeof field.id === 'number' && field.id < 0) continue;
+        
+        const fieldData = {
+          id: field.id,
+          name: field.name,
+          value_type: this.mapValueType(field.valueType || field.value_type || 1),
+          allows_multiple: field.allows_multiple || false,
+          track_changes: field.track_changes || false
+        };
+        
+        // Based on the API response structure and field analysis:
+        // - type: "list" = custom opportunity fields for this specific list
+        // - type: "relationship-intelligence" = global smart fields 
+        // - valueType: "person-multi" or id: "persons" = person fields
+        // - valueType: "company-multi" or id: "companies" = organization fields
+        
+        if (field.type === 'list') {
+          // Custom fields specific to this opportunity list
+          opportunityFields.push(fieldData);
+        } else if (field.type === 'relationship-intelligence') {
+          // Global relationship intelligence fields (Last Contact, First Email, etc.)
+          globalFields.push(fieldData);
+        } else if (field.valueType === 'person-multi' || field.id === 'persons') {
+          // Fields that link to person entities
+          personFields.push(fieldData);
+        } else if (field.valueType === 'company-multi' || field.id === 'companies') {
+          // Fields that link to organization entities
+          organizationFields.push(fieldData);
+        }
       }
       
-      // Fetch person-specific fields
-      const personFields = await this.getPersonFields();
+      // Additionally, get embedded fields from actual entities to find entity-specific fields
+      // These would be fields that exist on person/organization/opportunity entities themselves
+      console.log('Analyzing sample entries to discover entity-specific fields...');
+      const sampleEntries = await this.getListEntries(listId);
+      const entries = sampleEntries.entries.slice(0, 25); // Sample more entries for better coverage
       
-      // Fetch organization-specific fields
-      const organizationFields = await this.getOrganizationFields();
+      const entitySpecificFields = new Map<string, any>();
       
-      // Fetch opportunity-specific fields
-      const opportunityFields = await this.getOpportunityFields();
+      for (const entry of entries) {
+        // Check for embedded fields in the entity
+        if (entry.entity?.fields && Array.isArray(entry.entity.fields)) {
+          for (const embeddedField of entry.entity.fields) {
+            const fieldKey = embeddedField.id.toString();
+            
+            // Skip if we already have this field from the main list
+            const existsInMainList = allListFields.some(f => f.id.toString() === fieldKey);
+            if (existsInMainList) continue;
+            
+            if (!entitySpecificFields.has(fieldKey)) {
+              entitySpecificFields.set(fieldKey, {
+                field: embeddedField,
+                entityTypes: new Set([entry.entity_type]),
+                count: 1
+              });
+            } else {
+              const existing = entitySpecificFields.get(fieldKey)!;
+              existing.entityTypes.add(entry.entity_type);
+              existing.count++;
+            }
+          }
+        }
+      }
+      
+      // Add entity-specific fields to appropriate categories
+      for (const [fieldId, fieldInfo] of entitySpecificFields) {
+        const field = fieldInfo.field;
+        const entityTypes = Array.from(fieldInfo.entityTypes);
+        
+        const fieldData = {
+          id: field.id,
+          name: field.name,
+          value_type: this.inferValueType(field.value),
+          allows_multiple: field.allows_multiple || false,
+          track_changes: field.track_changes || false
+        };
+        
+        // Based on Affinity entity types: 0=Person, 1=Organization, 8=Opportunity
+        if (entityTypes.includes(0)) { // Person entity fields
+          personFields.push({...fieldData, entity_source: 'person'});
+        }
+        if (entityTypes.includes(1)) { // Organization entity fields
+          organizationFields.push({...fieldData, entity_source: 'organization'});
+        }
+        if (entityTypes.includes(8)) { // Opportunity entity fields
+          opportunityFields.push({...fieldData, entity_source: 'opportunity'});
+        }
+        
+        // If field appears in multiple entity types, also add to global
+        if (entityTypes.length > 1) {
+          globalFields.push({...fieldData, entity_source: 'multi-entity'});
+        }
+      }
+
+      console.log(`Categorized fields: ${opportunityFields.length} opportunity, ${personFields.length} person, ${organizationFields.length} organization, ${globalFields.length} global`);
+      console.log(`Found ${entitySpecificFields.size} additional entity-specific fields`);
       
       return {
         globalFields,
@@ -300,6 +402,41 @@ export class AffinityService {
       console.warn('Opportunity fields endpoint not available:', error);
       return [];
     }
+  }
+
+  // Helper method to map Affinity valueType to numeric value_type
+  private mapValueType(valueType: string | number): number {
+    if (typeof valueType === 'number') return valueType;
+    
+    const typeMap: { [key: string]: number } = {
+      'text': 1,
+      'number': 2,
+      'datetime': 3,
+      'dropdown': 4,
+      'ranked-dropdown': 5,
+      'dropdown-multi': 6,
+      'person-multi': 7,
+      'company-multi': 8,
+      'interaction': 9
+    };
+    
+    return typeMap[valueType] || 1;
+  }
+
+  // Helper method to infer value type from field value data
+  private inferValueType(value: any): number {
+    if (!value || !value.data) return 1; // Default to text
+    
+    if (value.data.type) return value.data.type;
+    
+    // Infer from the data structure
+    if (typeof value.data === 'string') return 1; // Text
+    if (typeof value.data === 'number') return 2; // Number
+    if (Array.isArray(value.data)) return 6; // Multi-select
+    if (value.data.text) return 1; // Text
+    if (value.data.value) return 2; // Number
+    
+    return 1; // Default to text
   }
 
   async getListEntryFieldValues(listId: number, listEntryId: number): Promise<AffinityFieldValue[]> {
