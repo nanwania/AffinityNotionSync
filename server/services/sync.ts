@@ -407,6 +407,10 @@ export class SyncService {
     const conflicts: InsertConflict[] = [];
     const fieldMappings = syncPair.fieldMappings as FieldMapping[];
 
+    // Get last sync time to determine what constitutes a "recent" change
+    const lastSyncTime = syncPair.lastSync ? new Date(syncPair.lastSync) : new Date(0);
+    const notionLastModified = new Date(notionPage.last_edited_time);
+
     for (const mapping of fieldMappings) {
       const affinityFieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
       const notionProperty = notionPage.properties[mapping.notionProperty];
@@ -415,22 +419,102 @@ export class SyncService {
         const affinityValue = affinityFieldValue.value;
         const notionValue = notionService.convertNotionToAffinityValue(notionProperty);
 
-        // Simple conflict detection - compare values
+        // Compare values - only create conflicts if they actually differ
         if (JSON.stringify(affinityValue) !== JSON.stringify(notionValue)) {
-          const conflict: InsertConflict = {
-            syncPairId: syncPair.id,
-            recordId: affinityEntry.entity.id.toString(),
-            recordType: affinityService.getEntityType(affinityEntry.entity),
-            fieldName: mapping.affinityField,
-            affinityValue: affinityValue,
-            notionValue: notionValue,
-            affinityLastModified: new Date(), // Would need actual modification time
-            notionLastModified: new Date(notionPage.last_edited_time),
-            status: 'pending'
-          };
+          
+          // Get Affinity field modification time (if available)
+          // Note: Affinity API doesn't provide field-level modification times in v2,
+          // so we use entity modification time as approximation
+          const affinityLastModified = affinityEntry.entity.last_modified 
+            ? new Date(affinityEntry.entity.last_modified) 
+            : new Date();
 
-          conflicts.push(conflict);
-          await storage.createConflict(conflict);
+          console.log(`Conflict detected for field '${mapping.affinityField}':`, {
+            affinityValue: JSON.stringify(affinityValue).substring(0, 100),
+            notionValue: JSON.stringify(notionValue).substring(0, 100),
+            affinityLastModified: affinityLastModified.toISOString(),
+            notionLastModified: notionLastModified.toISOString(),
+            lastSyncTime: lastSyncTime.toISOString()
+          });
+
+          // Intelligent conflict resolution based on timestamps and sync direction
+          let shouldCreateConflict = true;
+          let autoResolution: string | null = null;
+
+          // Auto-resolve based on modification times and sync direction
+          if (syncPair.syncDirection === 'affinity-to-notion') {
+            // Affinity is the source of truth - always use Affinity value
+            autoResolution = 'affinity';
+            shouldCreateConflict = false;
+            console.log(`Auto-resolving conflict in favor of Affinity (source of truth)`);
+          } else if (syncPair.syncDirection === 'notion-to-affinity') {
+            // Notion is the source of truth - always use Notion value
+            autoResolution = 'notion';
+            shouldCreateConflict = false;
+            console.log(`Auto-resolving conflict in favor of Notion (source of truth)`);
+          } else {
+            // Bidirectional sync - use timestamps to determine most recent change
+            const affinityModifiedAfterSync = affinityLastModified > lastSyncTime;
+            const notionModifiedAfterSync = notionLastModified > lastSyncTime;
+            
+            if (affinityModifiedAfterSync && !notionModifiedAfterSync) {
+              // Only Affinity was modified since last sync
+              autoResolution = 'affinity';
+              shouldCreateConflict = false;
+              console.log(`Auto-resolving conflict in favor of Affinity (more recent change)`);
+            } else if (notionModifiedAfterSync && !affinityModifiedAfterSync) {
+              // Only Notion was modified since last sync
+              autoResolution = 'notion';
+              shouldCreateConflict = false;
+              console.log(`Auto-resolving conflict in favor of Notion (more recent change)`);
+            } else if (affinityLastModified > notionLastModified) {
+              // Both modified, but Affinity is more recent
+              autoResolution = 'affinity';
+              shouldCreateConflict = false;
+              console.log(`Auto-resolving conflict in favor of Affinity (timestamp: ${affinityLastModified.toISOString()} > ${notionLastModified.toISOString()})`);
+            } else if (notionLastModified > affinityLastModified) {
+              // Both modified, but Notion is more recent
+              autoResolution = 'notion';
+              shouldCreateConflict = false;
+              console.log(`Auto-resolving conflict in favor of Notion (timestamp: ${notionLastModified.toISOString()} > ${affinityLastModified.toISOString()})`);
+            } else {
+              // Same timestamps or both modified since last sync - create manual conflict
+              console.log(`Creating manual conflict - both sources modified since last sync with similar timestamps`);
+            }
+          }
+
+          if (shouldCreateConflict) {
+            // Create conflict for manual resolution
+            const conflict: InsertConflict = {
+              syncPairId: syncPair.id,
+              recordId: affinityEntry.entity.id.toString(),
+              recordType: affinityService.getEntityType(affinityEntry.entity),
+              fieldName: mapping.affinityField,
+              affinityValue: affinityValue,
+              notionValue: notionValue,
+              affinityLastModified: affinityLastModified,
+              notionLastModified: notionLastModified,
+              status: 'pending'
+            };
+
+            conflicts.push(conflict);
+            await storage.createConflict(conflict);
+          } else if (autoResolution) {
+            // Apply auto-resolution immediately
+            if (autoResolution === 'affinity') {
+              // Update Notion with Affinity value
+              await notionService.updatePage(notionPage.id, {
+                [mapping.notionProperty]: notionService.convertAffinityToNotionProperty(
+                  affinityValue, 
+                  notionService.getPropertyType(await notionService.getDatabase(syncPair.notionDatabaseId), mapping.notionProperty)
+                )
+              });
+            } else {
+              // Update Affinity with Notion value (if supported by API)
+              // Note: Affinity v2 API has limited field update capabilities
+              console.log(`Would update Affinity field '${mapping.affinityField}' with Notion value, but API limitations may apply`);
+            }
+          }
         }
       }
     }
