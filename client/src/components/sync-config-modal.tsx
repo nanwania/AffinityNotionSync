@@ -174,16 +174,14 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
 
     setCreatingProperty(true);
     try {
-      await apiRequest(`/api/notion/databases/${formData.notionDatabaseId}/properties`, {
-        method: "POST",
-        body: JSON.stringify({
+      await apiRequest(
+        "POST",
+        `/api/notion/databases/${formData.notionDatabaseId}/properties`,
+        {
           propertyName: newPropertyName,
           propertyType: newPropertyType,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+        }
+      );
 
       // Refresh the database info to get the new property
       await queryClient.invalidateQueries({
