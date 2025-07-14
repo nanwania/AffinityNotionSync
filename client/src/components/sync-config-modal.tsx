@@ -71,11 +71,20 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     enabled: !!formData.affinityListId,
   });
 
+  // Debug logging
+  console.log("Status options debug:", {
+    affinityListId: formData.affinityListId,
+    statusOptions,
+    statusOptionsLength: statusOptions?.length,
+    enabled: !!formData.affinityListId
+  });
+
   useEffect(() => {
     if (syncPair) {
+      console.log("Loading existing sync pair:", syncPair);
       setFormData({
         name: syncPair.name,
-        affinityListId: syncPair.affinityListId,
+        affinityListId: syncPair.affinityListId.toString(),
         notionDatabaseId: syncPair.notionDatabaseId,
         syncDirection: syncPair.syncDirection,
         syncFrequency: syncPair.syncFrequency,
@@ -280,42 +289,48 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
               </div>
 
               {/* Status Filtering */}
-              {statusOptions && statusOptions.length > 0 && (
-                <div>
-                  <Label>Status Filter</Label>
-                  <p className="text-sm text-gray-500 mb-2">
-                    Select which statuses to sync. Leave empty to sync all.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                    {statusOptions?.map((option: any) => (
-                      <div key={option.id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id={`status-${option.id}`}
-                          checked={statusFilters.includes(option.text)}
-                          onChange={() => handleStatusToggle(option.text)}
-                          className="rounded border-gray-300"
-                        />
-                        <Label 
-                          htmlFor={`status-${option.id}`} 
-                          className="text-sm font-normal cursor-pointer"
-                        >
-                          {option.text}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                  {statusFilters.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {statusFilters.map((status) => (
-                        <Badge key={status} variant="secondary" className="text-xs">
-                          {status}
-                        </Badge>
+              <div>
+                <Label>Status Filter</Label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Select which statuses to sync. Leave empty to sync all.
+                </p>
+                {!formData.affinityListId ? (
+                  <p className="text-sm text-gray-400 italic">Select an Affinity list first to see status options</p>
+                ) : statusOptions && statusOptions.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                      {statusOptions?.map((option: any) => (
+                        <div key={option.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`status-${option.id}`}
+                            checked={statusFilters.includes(option.text)}
+                            onChange={() => handleStatusToggle(option.text)}
+                            className="rounded border-gray-300"
+                          />
+                          <Label 
+                            htmlFor={`status-${option.id}`} 
+                            className="text-sm font-normal cursor-pointer"
+                          >
+                            {option.text}
+                          </Label>
+                        </div>
                       ))}
                     </div>
-                  )}
+                    {statusFilters.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {statusFilters.map((status) => (
+                          <Badge key={status} variant="secondary" className="text-xs">
+                            {status}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">Loading status options...</p>
+                )}
                 </div>
-              )}
             </div>
           </div>
 
