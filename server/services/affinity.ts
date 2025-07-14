@@ -125,8 +125,9 @@ export class AffinityService {
     if (shouldFilter) {
       const fields = await this.getFields(listId);
       const statusField = fields.find(f => f.name.toLowerCase() === 'status');
+      // For v2 API, field IDs in entity.fields are prefixed with 'field-', but the fields API returns just the number
       statusFieldId = statusField ? `field-${statusField.id}` : undefined;
-      console.log(`Optimized filtering enabled for status field: ${statusField?.name} (${statusFieldId})`);
+      console.log(`Optimized filtering enabled for status field: ${statusField?.name} (looking for field ID: ${statusFieldId})`);
     }
 
     console.log(`Fetching entries for list ${listId}${shouldFilter ? ` with status filters: [${statusFilters.join(', ')}]` : ''}`);
@@ -151,9 +152,20 @@ export class AffinityService {
       
       // If filtering is enabled, filter entries as we fetch them
       if (shouldFilter && statusFieldId) {
-        const matchingEntries = result.entries.filter(entry => {
+        const matchingEntries = result.entries.filter((entry, index) => {
           const entityFields = entry.entity?.fields || [];
           const statusField = entityFields.find(f => f.id === statusFieldId);
+          
+          // Debug first entry to understand the data structure
+          if (pageCount === 1 && index === 0) {
+            console.log(`DEBUG: Entity ID ${entry.entity?.id}, looking for field ${statusFieldId}`);
+            console.log(`  Available field IDs: [${entityFields.map(f => f.id).slice(0, 8).join(', ')}]`);
+            const statusFieldFound = entityFields.find(f => f.name?.toLowerCase() === 'status');
+            console.log(`  Status field found by name: ${!!statusFieldFound}, ID: ${statusFieldFound?.id}, value: ${statusFieldFound?.value?.data?.text}`);
+            console.log(`  Target filters: [${statusFilters!.join(', ')}]`);
+            console.log(`  Match would be: ${statusFieldFound?.value?.data?.text && statusFilters!.includes(statusFieldFound.value.data.text)}`);
+          }
+          
           return statusField?.value?.data?.text && statusFilters!.includes(statusField.value.data.text);
         });
         allEntries.push(...matchingEntries);

@@ -242,39 +242,38 @@ export class SyncService {
         }
       }
 
-      // Clean up Notion pages that no longer match the status filters
-      if (syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0) {
-        console.log('Checking for Notion pages to delete that no longer match status filters...');
-        
-        // Create set of current Affinity entity IDs (filtered entries)
-        const currentAffinityIds = new Set(affinityEntries.map(entry => entry.entity.id.toString()));
-        
-        // Find Notion pages that have Affinity IDs but are NOT in current filtered set
-        const pagesToDelete = [];
-        for (const [affinityId, notionPage] of notionPageMap) {
-          if (!currentAffinityIds.has(affinityId)) {
-            pagesToDelete.push({ affinityId, notionPage });
-          }
+      // Clean up Notion pages for Affinity records that no longer exist
+      // Get ALL Affinity entries (not filtered) to check what still exists
+      const allAffinityEntries = await affinityService.getAllListEntries(parseInt(syncPair.affinityListId));
+      const allAffinityIds = new Set(allAffinityEntries.map(entry => entry.entity.id.toString()));
+      
+      console.log(`Checking for orphaned Notion pages against ${allAffinityIds.size} total Affinity entries`);
+      
+      // Find Notion pages that have Affinity IDs but the Affinity record no longer exists
+      const pagesToDelete = [];
+      for (const [affinityId, notionPage] of notionPageMap) {
+        if (!allAffinityIds.has(affinityId)) {
+          pagesToDelete.push({ affinityId, notionPage });
         }
-        
-        console.log(`Found ${pagesToDelete.length} Notion pages to delete (no longer match status filters)`);
-        
-        // Delete the pages
-        for (const { affinityId, notionPage } of pagesToDelete) {
-          try {
-            console.log(`Deleting Notion page for Affinity ID ${affinityId}: ${notionPage.id}`);
-            await notionService.deletePage(notionPage.id);
-            recordsDeleted++;
-          } catch (error) {
-            console.error(`Failed to delete Notion page ${notionPage.id} for Affinity ID ${affinityId}:`, error);
-          }
-        }
-        
-        details.cleanup = {
-          pagesToDelete: pagesToDelete.length,
-          deletedPages: recordsDeleted
-        };
       }
+      
+      console.log(`Found ${pagesToDelete.length} orphaned Notion pages (Affinity records no longer exist)`);
+      
+      // Delete the orphaned pages
+      for (const { affinityId, notionPage } of pagesToDelete) {
+        try {
+          console.log(`Deleting orphaned Notion page for missing Affinity ID ${affinityId}: ${notionPage.id}`);
+          await notionService.deletePage(notionPage.id);
+          recordsDeleted++;
+        } catch (error) {
+          console.error(`Failed to delete orphaned Notion page ${notionPage.id} for Affinity ID ${affinityId}:`, error);
+        }
+      }
+      
+      details.cleanup = {
+        totalAffinityRecords: allAffinityIds.size,
+        orphanedPagesDeleted: pagesToDelete.length
+      };
 
       return {
         success: true,
