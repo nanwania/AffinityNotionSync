@@ -138,7 +138,38 @@ export class SyncService {
 
     try {
       // Get Affinity list entries
-      const affinityEntries = await affinityService.getAllListEntries(parseInt(syncPair.affinityListId));
+      let affinityEntries = await affinityService.getAllListEntries(parseInt(syncPair.affinityListId));
+      
+      // Apply status filtering if configured
+      if (syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0) {
+        // Get field values for all entries to filter by status
+        const statusField = await affinityService.getFields(parseInt(syncPair.affinityListId))
+          .then(fields => fields.find(f => f.name.toLowerCase() === 'status'));
+        
+        if (statusField) {
+          const originalCount = affinityEntries.length;
+          const filteredEntries = [];
+          for (const entry of affinityEntries) {
+            try {
+              const fieldValues = await affinityService.getFieldValues(entry.entity_id, affinityService.getEntityType(entry.entity));
+              const statusValue = fieldValues.find(fv => fv.field_id === statusField.id);
+              
+              if (statusValue && statusValue.value && syncPair.statusFilters.includes(statusValue.value)) {
+                filteredEntries.push(entry);
+              }
+            } catch (error) {
+              // If we can't get field values, skip this entry
+              console.warn(`Could not get field values for entry ${entry.id}:`, error);
+            }
+          }
+          affinityEntries = filteredEntries;
+          details.statusFiltering = {
+            originalEntries: originalCount,
+            filteredEntries: filteredEntries.length,
+            statusFilters: syncPair.statusFilters
+          };
+        }
+      }
       
       // Get Notion database pages
       const notionPages = await notionService.queryDatabase(syncPair.notionDatabaseId);

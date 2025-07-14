@@ -33,6 +33,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     syncFrequency: 15,
   });
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [newMapping, setNewMapping] = useState<FieldMapping>({
     affinityField: "",
     notionProperty: "",
@@ -70,6 +71,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
         syncFrequency: syncPair.syncFrequency,
       });
       setFieldMappings(syncPair.fieldMappings as FieldMapping[] || []);
+      setStatusFilters(syncPair.statusFilters as string[] || []);
     } else {
       // Reset form for new sync pair
       setFormData({
@@ -80,6 +82,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
         syncFrequency: 15,
       });
       setFieldMappings([]);
+      setStatusFilters([]);
     }
   }, [syncPair, isOpen]);
 
@@ -120,6 +123,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
         affinityListName: affinityList.name,
         notionDatabaseName: notionDb.title?.[0]?.text?.content || "Untitled Database",
         fieldMappings: fieldMappings,
+        statusFilters: statusFilters,
       };
 
       if (syncPair) {
@@ -147,6 +151,18 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
   };
 
   const notionProperties = notionDatabase?.properties ? Object.keys(notionDatabase.properties) : [];
+  
+  // Get status field and its options from Affinity fields
+  const statusField = affinityFields?.find(field => field.name.toLowerCase() === 'status');
+  const statusOptions = statusField?.dropdown_options || [];
+
+  const handleStatusToggle = (statusName: string) => {
+    setStatusFilters(prev => 
+      prev.includes(statusName) 
+        ? prev.filter(s => s !== statusName)
+        : [...prev, statusName]
+    );
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={syncPair ? "Edit Sync Configuration" : "Create New Sync"}>
@@ -217,6 +233,44 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                   </div>
                 </RadioGroup>
               </div>
+
+              {/* Status Filtering */}
+              {statusOptions.length > 0 && (
+                <div>
+                  <Label>Status Filter</Label>
+                  <p className="text-sm text-gray-500 mb-2">
+                    Select which statuses to sync. Leave empty to sync all.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                    {statusOptions.map((option: any) => (
+                      <div key={option.id} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id={`status-${option.id}`}
+                          checked={statusFilters.includes(option.text)}
+                          onChange={() => handleStatusToggle(option.text)}
+                          className="rounded border-gray-300"
+                        />
+                        <Label 
+                          htmlFor={`status-${option.id}`} 
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {option.text}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                  {statusFilters.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {statusFilters.map((status) => (
+                        <Badge key={status} variant="secondary" className="text-xs">
+                          {status}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

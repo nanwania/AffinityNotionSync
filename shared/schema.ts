@@ -19,6 +19,7 @@ export const syncPairs = pgTable("sync_pairs", {
   syncDirection: text("sync_direction").notNull().default("bidirectional"), // bidirectional, affinity-to-notion, notion-to-affinity
   syncFrequency: integer("sync_frequency").notNull().default(15), // minutes
   fieldMappings: jsonb("field_mappings").notNull().default([]), // array of {affinityField, notionProperty}
+  statusFilters: jsonb("status_filters").notNull().default([]), // array of status names to sync
   isActive: boolean("is_active").notNull().default(true),
   lastSync: timestamp("last_sync"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
