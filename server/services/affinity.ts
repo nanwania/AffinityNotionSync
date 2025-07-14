@@ -292,12 +292,28 @@ export class AffinityService {
       // These would be fields that exist on person/organization/opportunity entities themselves
       console.log('Analyzing sample entries to discover entity-specific fields...');
       const sampleEntries = await this.getListEntries(listId);
-      const entries = sampleEntries.entries.slice(0, 25); // Sample more entries for better coverage
+      const entries = sampleEntries.entries.slice(0, 50); // Increase sample for better coverage
       
       const entitySpecificFields = new Map<string, any>();
+      const organizationIds = new Set<number>();
+      const personIds = new Set<number>();
       
+      // First pass: collect entity IDs and embedded fields from opportunity entries
       for (const entry of entries) {
-        // Check for embedded fields in the entity
+        // Debug first few entries to understand structure
+        if (organizationIds.size === 0 && personIds.size === 0) {
+          console.log(`Entry structure sample:`, {
+            id: entry.id,
+            entity_type: entry.entity_type,
+            entity_keys: entry.entity ? Object.keys(entry.entity) : [],
+            has_companies: !!entry.entity?.companies,
+            has_persons: !!entry.entity?.persons,
+            companies_length: entry.entity?.companies?.length || 0,
+            persons_length: entry.entity?.persons?.length || 0
+          });
+        }
+        
+        // Check for embedded fields in the main entity
         if (entry.entity?.fields && Array.isArray(entry.entity.fields)) {
           for (const embeddedField of entry.entity.fields) {
             const fieldKey = embeddedField.id.toString();
@@ -318,6 +334,173 @@ export class AffinityService {
               existing.count++;
             }
           }
+        }
+        
+        // Look for organization IDs in field values - this is where the actual linked data is
+        if (entry.entity?.fields && Array.isArray(entry.entity.fields)) {
+          for (const field of entry.entity.fields) {
+            // Check for organization references in field values
+            if (field.value?.data && Array.isArray(field.value.data)) {
+              for (const item of field.value.data) {
+                if (item.id && item.name && item.domain) {
+                  // This looks like an organization reference
+                  organizationIds.add(item.id);
+                }
+                if (item.id && item.first_name) {
+                  // This looks like a person reference
+                  personIds.add(item.id);
+                }
+              }
+            }
+            // Also check single organization/person references
+            if (field.value?.data?.id) {
+              if (field.value.data.domain || field.value.data.name) {
+                organizationIds.add(field.value.data.id);
+              }
+              if (field.value.data.first_name) {
+                personIds.add(field.value.data.id);
+              }
+            }
+          }
+        }
+      }
+      
+      // Second pass: fetch actual organization entities to get their fields
+      // Since the embedded approach may not capture all organization IDs, also try known ones
+      const knownOrgIds = [296778106, 65914191]; // Klura, Owkin from previous sync work
+      const allOrgIds = new Set([...organizationIds, ...knownOrgIds]);
+      
+      console.log(`Found ${organizationIds.size} unique organizations from entries, plus ${knownOrgIds.length} known organizations. Total: ${allOrgIds.size} to analyze for fields`);
+      const orgSample = Array.from(allOrgIds).slice(0, 10); // Sample 10 organizations
+      
+      // Organization fields endpoint is not available in API v2, but we provide virtual fields
+      console.log('Organization fields endpoint not available in API v2 - using virtual organization fields only');
+      // Virtual Organization ID field is already added in the virtual fields section
+      
+      // Alternative: try fetching a few organizations that might work
+      for (const orgId of orgSample.slice(0, 3)) {
+        try {
+          const org = await this.getOrganization(orgId);
+          if (org.fields && Array.isArray(org.fields)) {
+            console.log(`Organization ${orgId} has ${org.fields.length} fields`);
+            for (const orgField of org.fields) {
+              const fieldKey = orgField.id.toString();
+              
+              // Skip if already captured
+              const existsInMainList = allListFields.some(f => f.id.toString() === fieldKey);
+              if (existsInMainList) continue;
+              
+              if (!entitySpecificFields.has(fieldKey)) {
+                entitySpecificFields.set(fieldKey, {
+                  field: orgField,
+                  entityTypes: new Set([1]), // Organization entity type
+                  count: 1,
+                  sourceEntity: 'organization'
+                });
+              } else {
+                const existing = entitySpecificFields.get(fieldKey)!;
+                existing.entityTypes.add(1);
+                existing.count++;
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Could not fetch organization ${orgId}:`, error.message);
+        }
+      }
+      
+      // Third pass: fetch person fields using global endpoint and individual entities
+      console.log(`Found ${personIds.size} unique persons to analyze for fields`);
+      
+      // Try global person fields endpoint first
+      try {
+        console.log('Attempting to fetch global person fields...');
+        const personGlobalFields = await this.getPersonFields();
+        console.log(`Found ${personGlobalFields.length} global person fields`);
+        
+        for (const personField of personGlobalFields) {
+          // Map API v2 valueType to our internal value_type system
+          let value_type = 1; // Default to text
+          switch (personField.valueType) {
+            case 'text': 
+            case 'filterable-text':
+              value_type = 1; 
+              break;
+            case 'number': 
+              value_type = 2; 
+              break;
+            case 'datetime': 
+              value_type = 3; 
+              break;
+            case 'dropdown': 
+              value_type = 5; 
+              break;
+            case 'dropdown-multi': 
+            case 'filterable-text-multi':
+              value_type = 6; 
+              break;
+            case 'company': 
+            case 'company-multi':
+              value_type = 8; 
+              break;
+            case 'person': 
+              value_type = 7; 
+              break;
+            case 'interaction': 
+              value_type = 9; 
+              break;
+            case 'location': 
+              value_type = 10; 
+              break;
+            default: 
+              value_type = 1;
+          }
+          
+          const fieldData = {
+            id: personField.id,
+            name: personField.name,
+            value_type: value_type,
+            allows_multiple: personField.valueType?.includes('multi') || false,
+            track_changes: false,
+            field_type: 'person',
+            entity_type: 'person'
+          };
+          personFields.push(fieldData);
+        }
+      } catch (error) {
+        console.warn('Global person fields not available:', error.message);
+      }
+      
+      // Alternative: try fetching a few persons that might work
+      const personSample = Array.from(personIds).slice(0, 3); // Sample 3 persons
+      for (const personId of personSample) {
+        try {
+          const person = await this.getPerson(personId);
+          if (person.fields && Array.isArray(person.fields)) {
+            console.log(`Person ${personId} has ${person.fields.length} fields`);
+            for (const personField of person.fields) {
+              const fieldKey = personField.id.toString();
+              
+              // Skip if already captured
+              const existsInMainList = allListFields.some(f => f.id.toString() === fieldKey);
+              if (existsInMainList) continue;
+              
+              if (!entitySpecificFields.has(fieldKey)) {
+                entitySpecificFields.set(fieldKey, {
+                  field: personField,
+                  entityTypes: new Set([0]), // Person entity type
+                  count: 1,
+                  sourceEntity: 'person'
+                });
+              } else {
+                const existing = entitySpecificFields.get(fieldKey)!;
+                existing.entityTypes.add(0);
+                existing.count++;
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Could not fetch person ${personId}:`, error.message);
         }
       }
       
