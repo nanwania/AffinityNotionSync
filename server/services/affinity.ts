@@ -249,34 +249,29 @@ export class AffinityService {
     return response.data;
   }
 
-  async updateFieldValue(fieldValueId: number, value: any): Promise<AffinityFieldValue> {
-    // SAFETY CHECK: This method only updates field values, never deletes entries
-    console.log(`[AFFINITY UPDATE] Updating field value ${fieldValueId} with value:`, value);
-    
-    // For API v2, field updates might use a different endpoint structure
-    // Let's try the traditional field-values endpoint first, then fall back to batch operations if needed
-    try {
-      const response = await this.client.put(`/v2/field-values/${fieldValueId}`, { value });
-      return response.data;
-    } catch (error: any) {
-      if (error.response?.status === 404) {
-        console.log(`[AFFINITY UPDATE] Field value endpoint returned 404, this might be expected for API v2`);
-        throw new Error(`Field value update not supported in current API v2 implementation. Field ID: ${fieldValueId}, Value: ${JSON.stringify(value)}`);
-      }
-      throw error;
-    }
-  }
-
-  // Alternative method for batch field updates using API v2 operations endpoint
+  // API v2 Field Update Status: Currently Not Available
+  // Based on testing, Affinity API v2 does not yet support field value updates
+  // The following endpoints return "No route matches" errors:
+  // - PUT /v2/lists/{listId}/list-entries/{listEntryId}/field-values/{fieldId}
+  // - PUT /v2/lists/{listId}/list-entries/{listEntryId}/actions
+  
   async updateListEntryFields(listId: number, listEntryId: number, fieldUpdates: Array<{fieldId: string, value: any}>): Promise<any> {
     // SAFETY CHECK: This method only updates field values, never deletes entries
-    console.log(`[AFFINITY BATCH UPDATE] Updating fields for list entry ${listEntryId} in list ${listId} - NO DELETION WILL OCCUR`);
+    console.log(`[AFFINITY API v2 LIMITATION] Field updates not yet supported in API v2`);
+    console.log(`[AFFINITY SAFETY] Would update ${fieldUpdates.length} fields for list entry ${listEntryId} in list ${listId} - NO DELETION WILL OCCUR`);
     
-    const response = await this.client.patch(`/v2/lists/${listId}/list-entries/${listEntryId}/operations`, {
-      operation: 'update-fields',
-      fieldUpdates: fieldUpdates
+    // Log what would be updated for transparency
+    fieldUpdates.forEach(update => {
+      console.log(`[AFFINITY PLANNED UPDATE] Field ${update.fieldId}: ${JSON.stringify(update.value)}`);
     });
-    return response.data;
+    
+    throw new Error(`Affinity API v2 field updates not yet available. Tested endpoints: /v2/lists/${listId}/list-entries/${listEntryId}/actions and field-values endpoints both return 404. Field update functionality requires API v1 or waiting for v2 field update support.`);
+  }
+
+  // Legacy method for backward compatibility (not supported in API v2)
+  async updateFieldValue(fieldValueId: number, value: any): Promise<AffinityFieldValue> {
+    console.log(`[AFFINITY API v2 LIMITATION] Individual field value updates not supported in API v2`);
+    throw new Error(`Field value updates not available in Affinity API v2. Field ID: ${fieldValueId}, Value: ${JSON.stringify(value)}. API v2 currently supports data retrieval but not field modifications.`);
   }
 
   // SAFETY GUARANTEE: No deletion methods are implemented

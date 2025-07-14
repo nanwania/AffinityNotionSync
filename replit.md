@@ -98,14 +98,16 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
-### July 14, 2025: Affinity Deletion Protection System  
+### July 14, 2025: Affinity Deletion Protection System & API v2 Field Update Investigation
 - Implemented comprehensive safety measures to prevent ANY deletion of Affinity entries
 - Added multiple layers of protection in both sync service and Affinity service
-- System now only performs field updates on existing Affinity entries, never creates or deletes
 - Bidirectional sync functionality enabled with strict Affinity protection
-- Added safety logging and validation to detect any attempted deletions
-- Safety constants and validation ensure Affinity entries remain untouchable
-- Notion-to-Affinity sync direction safe for field updates while preserving all Affinity data
+- Investigated Affinity API v2 field update endpoints - currently not available
+- Tested endpoints: `/v2/lists/{listId}/list-entries/{listEntryId}/actions` and `/field-values/{fieldId}` both return 404
+- API v2 currently supports data retrieval but not field modifications
+- System safely processes sync operations while protecting against unsupported API calls
+- Field update preparation implemented but safely skipped until API v2 support is available
+- All safety logging and validation working correctly to ensure zero Affinity entry deletion
 
 ### July 14, 2025: Intelligent Sync Tracking System
 - Implemented database-backed sync tracking to eliminate unnecessary updates

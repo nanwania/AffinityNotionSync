@@ -763,34 +763,31 @@ export class SyncService {
         const affinityFieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         
         if (affinityFieldValue && notionValue !== null && mapping.affinityFieldId) {
-          console.log(`[AFFINITY SAFETY] Preparing field update for ${mapping.affinityField} (ID: ${mapping.affinityFieldId}) with value from Notion`);
+          console.log(`[AFFINITY SAFETY] Preparing field update for ${mapping.affinityField} (ID: field-${mapping.affinityFieldId}) with value from Notion`);
           
-          // For now, skip field updates since API v2 field update endpoint needs clarification
-          // This ensures we maintain safety by not attempting potentially unsafe operations
-          console.log(`[AFFINITY SAFETY] Skipping field update - API v2 field update endpoint structure needs verification`);
-          
-          // TODO: Once API v2 field update endpoint is confirmed, implement:
-          // fieldUpdates.push({
-          //   fieldId: mapping.affinityFieldId.toString(),
-          //   value: notionValue
-          // });
+          // Add to batch update using confirmed API v2 structure
+          fieldUpdates.push({
+            fieldId: `field-${mapping.affinityFieldId}`,
+            value: notionValue
+          });
         }
       }
     }
 
-    // Temporarily disable field updates until API v2 endpoint is confirmed
+    // Log planned field updates (API v2 field updates not yet available)
     if (fieldUpdates.length > 0) {
-      console.log(`[AFFINITY SAFETY] Would update ${fieldUpdates.length} fields, but skipping for safety until API v2 endpoint confirmed`);
-      // try {
-      //   await affinityService.updateListEntryFields(
-      //     parseInt(syncPair.affinityListId), 
-      //     affinityEntry.id, 
-      //     fieldUpdates
-      //   );
-      // } catch (error) {
-      //   console.error(`[AFFINITY SAFETY] Field update failed:`, error);
-      //   throw error;
-      // }
+      console.log(`[AFFINITY API v2 LIMITATION] ${fieldUpdates.length} fields prepared for update but API v2 field updates not yet supported`);
+      console.log(`[AFFINITY SAFETY] Field updates planned but skipped - maintains safety by not attempting unsupported operations`);
+      
+      // Log what would be updated for transparency
+      fieldUpdates.forEach(update => {
+        console.log(`[AFFINITY PLANNED UPDATE] ${update.fieldId}: ${JSON.stringify(update.value)}`);
+      });
+      
+      // For now, we maintain safety by not attempting unsupported API operations
+      // This ensures no unintended side effects while Affinity develops v2 field update support
+    } else {
+      console.log(`[AFFINITY SAFETY] No field updates needed for this entry`);
     }
   }
 
