@@ -104,7 +104,7 @@ export class AffinityService {
 
     const response = await this.client.get(`/lists/${listId}/list-entries`, { params });
     return {
-      entries: response.data,
+      entries: response.data.list_entries || response.data,
       nextPageToken: response.headers['x-next-page-token']
     };
   }
@@ -120,6 +120,39 @@ export class AffinityService {
     } while (nextPageToken);
 
     return allEntries;
+  }
+
+  async getEnrichedListEntries(listId: number): Promise<any[]> {
+    const entries = await this.getAllListEntries(listId);
+    const enrichedEntries = [];
+
+    for (const entry of entries) {
+      let enrichedEntry = { ...entry };
+      
+      // If entity is an organization (type 1), fetch additional org details
+      if (entry.entity_type === 1) {
+        try {
+          const orgDetails = await this.getOrganization(entry.entity_id);
+          enrichedEntry.organization = orgDetails;
+        } catch (error) {
+          console.warn(`Could not fetch organization details for ${entry.entity_id}:`, error);
+        }
+      }
+      
+      // If entity is a person (type 0), fetch additional person details  
+      if (entry.entity_type === 0) {
+        try {
+          const personDetails = await this.getPerson(entry.entity_id);
+          enrichedEntry.person = personDetails;
+        } catch (error) {
+          console.warn(`Could not fetch person details for ${entry.entity_id}:`, error);
+        }
+      }
+
+      enrichedEntries.push(enrichedEntry);
+    }
+
+    return enrichedEntries;
   }
 
   async getFields(listId?: number): Promise<AffinityField[]> {

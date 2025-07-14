@@ -156,9 +156,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const listId = parseInt(req.params.id);
       const fields = await affinityService.getFields(listId);
-      res.json(fields);
+      
+      // Add organization fields as virtual fields since entities contain this data
+      const fieldsWithOrganization = [
+        ...fields,
+        {
+          id: -1,
+          name: "Entity Name",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        },
+        {
+          id: -2, 
+          name: "Entity Domain",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        },
+        {
+          id: -3,
+          name: "Entity Type",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        }
+      ];
+      
+      res.json(fieldsWithOrganization);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch Affinity fields" });
+    }
+  });
+
+  app.get("/api/affinity/lists/:id/entries", async (req, res) => {
+    try {
+      const listId = parseInt(req.params.id);
+      console.log(`Fetching entries for list ${listId}`);
+      
+      // Get all entries for the list
+      const entries = await affinityService.getAllListEntries(listId);
+      console.log(`Got ${entries.length} entries`);
+      res.json(entries);
+    } catch (error: any) {
+      console.error("Error fetching list entries:", error);
+      console.error("Error details:", error.response?.data || error.message);
+      console.error("Error status:", error.response?.status);
+      res.status(500).json({ 
+        error: "Failed to fetch Affinity list entries", 
+        details: error.response?.data || error.message,
+        status: error.response?.status
+      });
+    }
+  });
+
+  app.get("/api/affinity/lists/:id/entries-enriched", async (req, res) => {
+    try {
+      const listId = parseInt(req.params.id);
+      const entries = await affinityService.getEnrichedListEntries(listId);
+      res.json(entries);
+    } catch (error: any) {
+      console.error("Error fetching enriched list entries:", error.message);
+      res.status(500).json({ error: "Failed to fetch enriched Affinity list entries" });
     }
   });
 
