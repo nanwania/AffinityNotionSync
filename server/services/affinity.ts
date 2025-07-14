@@ -125,8 +125,8 @@ export class AffinityService {
     if (shouldFilter) {
       const fields = await this.getFields(listId);
       const statusField = fields.find(f => f.name.toLowerCase() === 'status');
-      // For v2 API, field IDs in entity.fields are prefixed with 'field-', but the fields API returns just the number
-      statusFieldId = statusField ? `field-${statusField.id}` : undefined;
+      // The fields API already returns IDs with 'field-' prefix for most fields
+      statusFieldId = statusField ? statusField.id : undefined;
       console.log(`Optimized filtering enabled for status field: ${statusField?.name} (looking for field ID: ${statusFieldId})`);
     }
 
