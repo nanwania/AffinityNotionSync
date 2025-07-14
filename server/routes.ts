@@ -299,6 +299,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/notion/databases/:id/properties", async (req, res) => {
+    try {
+      const { propertyName, propertyType = 'rich_text' } = req.body;
+      
+      if (!propertyName) {
+        return res.status(400).json({ error: "Property name is required" });
+      }
+
+      const database = await notionService.addPropertyToDatabase(req.params.id, propertyName, propertyType);
+      res.json(database);
+    } catch (error) {
+      console.error("Error adding property to Notion database:", error);
+      res.status(500).json({ error: "Failed to add property to Notion database" });
+    }
+  });
+
   app.post("/api/notion/test-database", async (req, res) => {
     try {
       const testDb = await notionService.createDatabaseIfNotExists('Test Sync Database', {

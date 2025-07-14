@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Plus, Trash2, ArrowRight } from "lucide-react";
 import { SyncPair } from "@shared/schema";
 import { useCreateSyncPair, useUpdateSyncPair } from "@/hooks/use-sync-pairs";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface SyncConfigModalProps {
   isOpen: boolean;
@@ -38,10 +39,14 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     affinityField: "",
     notionProperty: "",
   });
+  const [newPropertyName, setNewPropertyName] = useState("");
+  const [newPropertyType, setNewPropertyType] = useState("rich_text");
+  const [creatingProperty, setCreatingProperty] = useState(false);
 
   const { toast } = useToast();
   const createSyncPair = useCreateSyncPair();
   const updateSyncPair = useUpdateSyncPair();
+  const queryClient = useQueryClient();
 
   const { data: affinityLists } = useQuery<any[]>({
     queryKey: ["/api/affinity/lists"],
@@ -162,6 +167,47 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
         ? prev.filter(s => s !== statusName)
         : [...prev, statusName]
     );
+  };
+
+  const handleCreateProperty = async () => {
+    if (!newPropertyName || !formData.notionDatabaseId) return;
+
+    setCreatingProperty(true);
+    try {
+      await apiRequest(`/api/notion/databases/${formData.notionDatabaseId}/properties`, {
+        method: "POST",
+        body: JSON.stringify({
+          propertyName: newPropertyName,
+          propertyType: newPropertyType,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      // Refresh the database info to get the new property
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/notion/databases", formData.notionDatabaseId],
+      });
+
+      toast({
+        title: "Success",
+        description: `Property "${newPropertyName}" created successfully`,
+      });
+
+      // Clear the form
+      setNewPropertyName("");
+      setNewPropertyType("rich_text");
+    } catch (error) {
+      console.error("Error creating property:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create property",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingProperty(false);
+    }
   };
 
   return (
@@ -351,21 +397,63 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
 
               <div>
                 <Label htmlFor="notionProperty">Notion Property</Label>
-                <Select 
-                  value={newMapping.notionProperty} 
-                  onValueChange={(value) => setNewMapping({ ...newMapping, notionProperty: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {notionProperties.map((property) => (
-                      <SelectItem key={property} value={property}>
-                        {property}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="space-y-2">
+                  <Select 
+                    value={newMapping.notionProperty} 
+                    onValueChange={(value) => setNewMapping({ ...newMapping, notionProperty: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select property" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {notionProperties.map((property) => (
+                        <SelectItem key={property} value={property}>
+                          {property}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <div className="text-xs text-gray-500">
+                    Or create a new property:
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="New property name"
+                      value={newPropertyName}
+                      onChange={(e) => setNewPropertyName(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Select 
+                      value={newPropertyType} 
+                      onValueChange={setNewPropertyType}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rich_text">Text</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="select">Select</SelectItem>
+                        <SelectItem value="multi_select">Multi-select</SelectItem>
+                        <SelectItem value="date">Date</SelectItem>
+                        <SelectItem value="checkbox">Checkbox</SelectItem>
+                        <SelectItem value="url">URL</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      onClick={handleCreateProperty}
+                      disabled={!newPropertyName || !formData.notionDatabaseId || creatingProperty}
+                      className="bg-blue-600 hover:bg-blue-700"
+                      size="sm"
+                    >
+                      {creatingProperty ? "Creating..." : "Create"}
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-end">

@@ -186,6 +186,42 @@ export class NotionService {
     return response as NotionPage;
   }
 
+  async addPropertyToDatabase(databaseId: string, propertyName: string, propertyType: string = 'rich_text'): Promise<NotionDatabase> {
+    // Map common property types to Notion schema
+    const propertyTypeMap: Record<string, any> = {
+      'text': { rich_text: {} },
+      'rich_text': { rich_text: {} },
+      'number': { number: {} },
+      'select': { select: { options: [] } },
+      'multi_select': { multi_select: { options: [] } },
+      'date': { date: {} },
+      'checkbox': { checkbox: {} },
+      'url': { url: {} },
+      'email': { email: {} },
+      'phone_number': { phone_number: {} },
+      'people': { people: {} },
+      'relation': { relation: { database_id: '', single_property: '', dual_property: {} } },
+      'formula': { formula: { expression: '' } },
+      'rollup': { rollup: { relation_property_name: '', relation_property_id: '', rollup_property_name: '', rollup_property_id: '', function: 'count' } },
+      'created_time': { created_time: {} },
+      'created_by': { created_by: {} },
+      'last_edited_time': { last_edited_time: {} },
+      'last_edited_by': { last_edited_by: {} },
+      'title': { title: {} }
+    };
+
+    const propertySchema = propertyTypeMap[propertyType] || { rich_text: {} };
+
+    const response = await notion.databases.update({
+      database_id: databaseId,
+      properties: {
+        [propertyName]: propertySchema
+      }
+    });
+
+    return response as NotionDatabase;
+  }
+
   // Helper methods to convert between Affinity and Notion data types
   convertAffinityToNotionProperty(affinityValue: any, notionPropertyType: string): any {
     switch (notionPropertyType) {
