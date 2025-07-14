@@ -189,6 +189,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           track_changes: false,
           enrichment_source: "entity",
           dropdown_options: []
+        },
+        {
+          id: -4,
+          name: "Name",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        },
+        {
+          id: -5,
+          name: "Opportunity ID",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        },
+        {
+          id: -6,
+          name: "Organization Name",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
+        },
+        {
+          id: -7,
+          name: "Organization ID",
+          list_id: listId,
+          value_type: 1, // Text type
+          allows_multiple: false,
+          track_changes: false,
+          enrichment_source: "entity",
+          dropdown_options: []
         }
       ];
       

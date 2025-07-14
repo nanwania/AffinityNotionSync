@@ -194,7 +194,7 @@ export class SyncService {
         const fieldValues = await affinityService.getFieldValues(entry.entity_id, entityType);
 
         // Convert field values to Notion properties
-        const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId);
+        const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
         
         // Add Affinity ID to properties for tracking
         notionProperties['Affinity_ID'] = {
@@ -380,17 +380,52 @@ export class SyncService {
   private async convertAffinityToNotionProperties(
     fieldValues: AffinityFieldValue[], 
     fieldMappings: FieldMapping[], 
-    notionDatabaseId: string
+    notionDatabaseId: string,
+    affinityEntry?: AffinityListEntry
   ): Promise<Record<string, any>> {
     const notionProperties: Record<string, any> = {};
     const database = await notionService.getDatabase(notionDatabaseId);
 
     for (const mapping of fieldMappings) {
-      const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
-      if (fieldValue) {
+      let value = null;
+      
+      // Handle virtual fields (negative IDs)
+      if (mapping.affinityFieldId && mapping.affinityFieldId < 0 && affinityEntry) {
+        switch (mapping.affinityFieldId) {
+          case -1: // Entity Name
+            value = affinityEntry.entity.name;
+            break;
+          case -2: // Entity Domain
+            value = affinityEntry.entity.domain || (affinityEntry.entity.domains && affinityEntry.entity.domains[0]) || null;
+            break;
+          case -3: // Entity Type
+            value = affinityEntry.entity_type === 1 ? 'Organization' : affinityEntry.entity_type === 0 ? 'Person' : 'Opportunity';
+            break;
+          case -4: // Name (same as Entity Name)
+            value = affinityEntry.entity.name;
+            break;
+          case -5: // Opportunity ID
+            value = affinityEntry.entity_type === 2 ? affinityEntry.entity_id.toString() : null;
+            break;
+          case -6: // Organization Name
+            value = affinityEntry.entity_type === 1 ? affinityEntry.entity.name : null;
+            break;
+          case -7: // Organization ID
+            value = affinityEntry.entity_type === 1 ? affinityEntry.entity_id.toString() : null;
+            break;
+        }
+      } else {
+        // Handle regular field values
+        const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
+        if (fieldValue) {
+          value = fieldValue.value;
+        }
+      }
+      
+      if (value !== null) {
         const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
         notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
-          fieldValue.value, 
+          value, 
           propertyType
         );
       }
