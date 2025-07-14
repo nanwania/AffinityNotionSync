@@ -105,22 +105,7 @@ export class AffinityService {
       params.cursor = cursor;
     }
 
-    console.log(`API v2 Request: GET /v2/lists/${listId}/list-entries with params:`, params);
     const response = await this.client.get(`/v2/lists/${listId}/list-entries`, { params });
-    
-    console.log(`API v2 Response: Got ${(response.data.data || []).length} entries`);
-    console.log('Response structure:', {
-      dataLength: response.data.data?.length,
-      nextUrl: response.data.nextUrl,
-      hasMore: response.data.hasMore,
-      fullResponseKeys: Object.keys(response.data),
-      pagination: response.data.pagination
-    });
-    
-    // Debug: Log first entry structure to understand v2 response format
-    if (response.data.data && response.data.data.length > 0) {
-      console.log('First entry with fields:', JSON.stringify(response.data.data[0], null, 2).substring(0, 1000));
-    }
     
     return {
       entries: response.data.data || [],
@@ -128,12 +113,23 @@ export class AffinityService {
     };
   }
 
-  async getAllListEntries(listId: number): Promise<AffinityListEntry[]> {
+  async getAllListEntries(listId: number, statusFilters?: string[]): Promise<AffinityListEntry[]> {
     const allEntries: AffinityListEntry[] = [];
     let nextUrl: string | undefined;
     let pageCount = 0;
+    
+    // Pre-filter optimization
+    const shouldFilter = statusFilters && statusFilters.length > 0;
+    let statusFieldId: string | undefined;
+    
+    if (shouldFilter) {
+      const fields = await this.getFields(listId);
+      const statusField = fields.find(f => f.name.toLowerCase() === 'status');
+      statusFieldId = statusField ? `field-${statusField.id}` : undefined;
+      console.log(`Optimized filtering enabled for status field: ${statusField?.name} (${statusFieldId})`);
+    }
 
-    console.log(`Fetching all entries for list ${listId} using API v2...`);
+    console.log(`Fetching entries for list ${listId}${shouldFilter ? ` with status filters: [${statusFilters.join(', ')}]` : ''}`);
 
     do {
       pageCount++;
@@ -141,45 +137,36 @@ export class AffinityService {
       let result;
       if (nextUrl) {
         // Use the full nextUrl directly for pagination
-        console.log(`Fetching page ${pageCount} using nextUrl: ${nextUrl.substring(0, 80)}...`);
-        
         // Parse the nextUrl to get the path and params
         const url = new URL(nextUrl);
         const response = await this.client.get(url.pathname + url.search);
-        
-        console.log(`API v2 Response (page ${pageCount}): Got ${(response.data.data || []).length} entries`);
-        console.log('Response pagination:', {
-          hasNextUrl: !!response.data.pagination?.nextUrl,
-          nextUrlPreview: response.data.pagination?.nextUrl?.substring(0, 60)
-        });
         
         result = {
           entries: response.data.data || [],
           nextUrl: response.data.pagination?.nextUrl
         };
       } else {
-        console.log(`Fetching page ${pageCount} (first page)`);
         result = await this.getListEntries(listId);
       }
       
-      allEntries.push(...result.entries);
-      nextUrl = result.nextUrl;
-      
-      console.log(`Page ${pageCount}: Got ${result.entries.length} entries. Total so far: ${allEntries.length}`);
-      console.log('Next URL debug:', { 
-        hasNextUrl: !!nextUrl, 
-        nextUrlLength: nextUrl?.length,
-        nextUrlPreview: nextUrl?.substring(0, 100)
-      });
-      
-      if (nextUrl) {
-        console.log(`Next URL available for page ${pageCount + 1}: ${nextUrl.substring(0, 100)}...`);
+      // If filtering is enabled, filter entries as we fetch them
+      if (shouldFilter && statusFieldId) {
+        const matchingEntries = result.entries.filter(entry => {
+          const entityFields = entry.entity?.fields || [];
+          const statusField = entityFields.find(f => f.id === statusFieldId);
+          return statusField?.value?.data?.text && statusFilters!.includes(statusField.value.data.text);
+        });
+        allEntries.push(...matchingEntries);
+        console.log(`Page ${pageCount}: ${result.entries.length} entries, ${matchingEntries.length} match filters. Total filtered: ${allEntries.length}`);
       } else {
-        console.log('No more pages available - pagination complete');
+        allEntries.push(...result.entries);
+        console.log(`Page ${pageCount}: Got ${result.entries.length} entries. Total so far: ${allEntries.length}`);
       }
+      
+      nextUrl = result.nextUrl;
     } while (nextUrl);
 
-    console.log(`Finished fetching all entries. Total: ${allEntries.length} entries across ${pageCount} pages`);
+    console.log(`Finished fetching ${shouldFilter ? 'and filtering ' : ''}entries. Total: ${allEntries.length} entries across ${pageCount} pages`);
     return allEntries;
   }
 

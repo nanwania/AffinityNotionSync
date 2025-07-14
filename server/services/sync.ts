@@ -151,87 +151,21 @@ export class SyncService {
     const details: any = {};
 
     try {
-      // Get Affinity list entries
-      let affinityEntries = await affinityService.getAllListEntries(parseInt(syncPair.affinityListId));
+      // Get Affinity list entries with optional pre-filtering for performance
+      let affinityEntries = await affinityService.getAllListEntries(
+        parseInt(syncPair.affinityListId),
+        syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0 
+          ? syncPair.statusFilters 
+          : undefined
+      );
       
-      // Apply status filtering if configured
+      // Status filtering is now handled in getAllListEntries for performance
       if (syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0) {
-        // Get field values for all entries to filter by status
-        const statusField = await affinityService.getFields(parseInt(syncPair.affinityListId))
-          .then(fields => fields.find(f => f.name.toLowerCase() === 'status'));
-        
-        if (statusField) {
-          console.log(`Status filtering enabled. Field: ${statusField.name} (ID: ${statusField.id})`);
-          console.log(`Target status filters: [${syncPair.statusFilters.join(', ')}]`);
-          
-          const originalCount = affinityEntries.length;
-          const filteredEntries = [];
-          const statusCounts: Record<string, number> = {};
-          
-          for (const entry of affinityEntries) {
-            try {
-              // For v2 API, field values are embedded in entry.entity.fields
-              const entityFields = entry.entity?.fields || [];
-              
-              // Debug: Log the first entry's field structure to understand the format
-              if (entry === affinityEntries[0]) {
-                console.log('DEBUG: First entry entity structure:', JSON.stringify({
-                  entityId: entry.entity.id,
-                  entityType: entry.entity_type,
-                  entityFields: entityFields.length > 0 ? entityFields.slice(0, 2) : 'No fields found',
-                  statusFieldId: statusField.id,
-                  lookingFor: [`field-${statusField.id}`, statusField.id.toString()]
-                }, null, 2));
-              }
-              
-              const statusField_v2 = entityFields.find(f => f.id === `field-${statusField.id}` || f.id === statusField.id.toString());
-              
-              // Handle both string and object status values from v2 API
-              let statusText = 'No Status';
-              let statusMatch = false;
-              
-              if (statusField_v2 && statusField_v2.value && statusField_v2.value.data) {
-                const fieldValue = statusField_v2.value.data;
-                if (typeof fieldValue === 'string') {
-                  statusText = fieldValue;
-                  statusMatch = syncPair.statusFilters.includes(fieldValue);
-                } else if (typeof fieldValue === 'object' && fieldValue.text) {
-                  // Affinity dropdown values are objects with a 'text' property
-                  statusText = fieldValue.text;
-                  statusMatch = syncPair.statusFilters.includes(fieldValue.text);
-                }
-              }
-              
-              statusCounts[statusText] = (statusCounts[statusText] || 0) + 1;
-              
-              if (statusMatch) {
-                filteredEntries.push(entry);
-              }
-            } catch (error) {
-              // If we can't get field values, skip this entry
-              console.warn(`Could not get field values for entry ${entry.id}:`, error);
-              statusCounts['Error fetching status'] = (statusCounts['Error fetching status'] || 0) + 1;
-            }
-          }
-          
-          console.log(`Status distribution in ${originalCount} entries:`, statusCounts);
-          console.log(`Filtered to ${filteredEntries.length} entries matching status filters`);
-          
-          // Debug: Show which entries are being included/excluded
-          console.log(`Target status filters: [${syncPair.statusFilters.join(', ')}]`);
-          const includedStatuses = Object.keys(statusCounts).filter(status => syncPair.statusFilters.includes(status));
-          const excludedStatuses = Object.keys(statusCounts).filter(status => !syncPair.statusFilters.includes(status));
-          console.log(`Included statuses and counts:`, includedStatuses.map(s => `${s}: ${statusCounts[s]}`));
-          console.log(`Excluded statuses and counts:`, excludedStatuses.map(s => `${s}: ${statusCounts[s]}`));
-          
-          affinityEntries = filteredEntries;
-          details.statusFiltering = {
-            originalEntries: originalCount,
-            filteredEntries: filteredEntries.length,
-            statusFilters: syncPair.statusFilters,
-            statusCounts
-          };
-        }
+        console.log(`Pre-filtered to ${affinityEntries.length} entries matching status filters: [${syncPair.statusFilters.join(', ')}]`);
+        details.statusFiltering = {
+          filteredEntries: affinityEntries.length,
+          statusFilters: syncPair.statusFilters
+        };
       }
       
       // Get Notion database pages
@@ -256,37 +190,55 @@ export class SyncService {
       
       console.log(`Notion pages breakdown: ${pagesWithAffinityId} with Affinity ID, ${pagesWithoutAffinityId} without Affinity ID`);
 
-      // Process each Affinity entry
-      for (const entry of affinityEntries) {
-        const affinityId = entry.entity.id.toString();
-        const existingNotionPage = notionPageMap.get(affinityId);
+      // Process Affinity entries in batches for better performance
+      const BATCH_SIZE = 5; // Process 5 entries in parallel
+      console.log(`Processing ${affinityEntries.length} entries in batches of ${BATCH_SIZE}`);
+      
+      for (let i = 0; i < affinityEntries.length; i += BATCH_SIZE) {
+        const batch = affinityEntries.slice(i, i + BATCH_SIZE);
+        console.log(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(affinityEntries.length/BATCH_SIZE)}: entries ${i+1}-${Math.min(i+BATCH_SIZE, affinityEntries.length)}`);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (entry) => {
+          const affinityId = entry.entity.id.toString();
+          const existingNotionPage = notionPageMap.get(affinityId);
 
-        // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
-        const entityFields = entry.entity?.fields || [];
-        const fieldValues = entityFields.map(field => ({
-          field_id: field.id.replace('field-', ''), // Remove field- prefix if present
-          value: field.value?.data,
-          id: field.id
-        }));
+          // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
+          const entityFields = entry.entity?.fields || [];
+          const fieldValues = entityFields.map(field => ({
+            field_id: field.id.replace('field-', ''), // Remove field- prefix if present
+            value: field.value?.data,
+            id: field.id
+          }));
 
-        // Convert field values to Notion properties (includes Affinity ID automatically)
-        const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
+          // Convert field values to Notion properties (includes Affinity ID automatically)
+          const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
 
-        if (existingNotionPage) {
-          // Check for conflicts
-          const conflicts = await this.detectConflicts(syncPair, entry, existingNotionPage, fieldValues);
-          if (conflicts.length > 0) {
-            conflictsFound += conflicts.length;
-            continue; // Skip update if conflicts found
+          if (existingNotionPage) {
+            // Check for conflicts
+            const conflicts = await this.detectConflicts(syncPair, entry, existingNotionPage, fieldValues);
+            if (conflicts.length > 0) {
+              return { type: 'conflict', count: conflicts.length };
+            }
+
+            // Update existing page
+            await notionService.updatePage(existingNotionPage.id, notionProperties);
+            return { type: 'updated', count: 1 };
+          } else {
+            // Create new page
+            await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
+            return { type: 'created', count: 1 };
           }
-
-          // Update existing page
-          await notionService.updatePage(existingNotionPage.id, notionProperties);
-          recordsUpdated++;
-        } else {
-          // Create new page
-          await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
-          recordsCreated++;
+        });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Update counters
+        for (const result of batchResults) {
+          if (result.type === 'updated') recordsUpdated += result.count;
+          else if (result.type === 'created') recordsCreated += result.count;
+          else if (result.type === 'conflict') conflictsFound += result.count;
         }
       }
 
