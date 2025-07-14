@@ -59,6 +59,11 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
     enabled: !!formData.affinityListId,
   });
 
+  const { data: allAffinityFields } = useQuery<any>({
+    queryKey: ["/api/affinity/lists", formData.affinityListId, "all-fields"],
+    enabled: !!formData.affinityListId,
+  });
+
   const { data: notionDatabase } = useQuery<any>({
     queryKey: ["/api/notion/databases", formData.notionDatabaseId],
     enabled: !!formData.notionDatabaseId,
@@ -490,37 +495,327 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                   <div>→ Notion Property</div>
                 </div>
                 
-                <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {/* Virtual Fields Section */}
-                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <p className="text-xs font-medium text-blue-800 mb-2">Virtual Fields (Auto-generated)</p>
-                    {[
-                      { name: "Organization ID", id: -7, description: "ID of the associated organization" },
-                      { name: "Entity Name", id: -1, description: "Name of the entity" },
-                      { name: "Entity Type", id: -3, description: "Type (Person/Organization/Opportunity)" }
-                    ].map((virtualField) => {
-                      const isSelected = selectedFields.hasOwnProperty(virtualField.name);
+                <div className="space-y-4 max-h-80 overflow-y-auto">
+                  {/* Use comprehensive field data if available, otherwise fallback to simple fields */}
+                  {allAffinityFields ? (
+                    <>
+                      {/* Virtual Fields Section */}
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                        <p className="text-xs font-medium text-blue-800 mb-2">Virtual Fields (Auto-generated)</p>
+                        {allAffinityFields.virtual?.map((field: any) => {
+                          const isSelected = selectedFields.hasOwnProperty(field.name);
+                          return (
+                            <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-blue-100 last:border-b-0">
+                              <div className="flex items-center">
+                                <Checkbox
+                                  id={`virtual-${field.id}`}
+                                  checked={isSelected}
+                                  onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                />
+                              </div>
+                              
+                              <div className="flex items-center space-x-2">
+                                <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                                  {field.name}
+                                </Badge>
+                              </div>
+                              
+                              <div>
+                                {isSelected ? (
+                                  <Select
+                                    value={selectedFields[field.name] || ''}
+                                    onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                  >
+                                    <SelectTrigger className="h-8">
+                                      <SelectValue placeholder="Select property" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {notionProperties.map((property) => (
+                                        <SelectItem key={property} value={property}>
+                                          {property}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-xs text-blue-500">{field.entity_type} field</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Global Fields Section */}
+                      {allAffinityFields.global && allAffinityFields.global.length > 0 && (
+                        <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                          <p className="text-xs font-medium text-green-800 mb-2">Global Fields (All Entities)</p>
+                          {allAffinityFields.global.map((field: any) => {
+                            const isSelected = selectedFields.hasOwnProperty(field.name);
+                            return (
+                              <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-green-100 last:border-b-0">
+                                <div className="flex items-center">
+                                  <Checkbox
+                                    id={`global-${field.id}`}
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="outline" className="text-xs border-green-300 text-green-700">
+                                    {field.name}
+                                  </Badge>
+                                </div>
+                                
+                                <div>
+                                  {isSelected ? (
+                                    <Select
+                                      value={selectedFields[field.name] || ''}
+                                      onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select property" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {notionProperties.map((property) => (
+                                          <SelectItem key={property} value={property}>
+                                            {property}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-green-500">Global field</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* List-Specific Fields Section */}
+                      {allAffinityFields.list && allAffinityFields.list.length > 0 && (
+                        <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                          <p className="text-xs font-medium text-purple-800 mb-2">List-Specific Fields</p>
+                          {allAffinityFields.list.map((field: any) => {
+                            const isSelected = selectedFields.hasOwnProperty(field.name);
+                            return (
+                              <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-purple-100 last:border-b-0">
+                                <div className="flex items-center">
+                                  <Checkbox
+                                    id={`list-${field.id}`}
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="outline" className="text-xs border-purple-300 text-purple-700">
+                                    {field.name}
+                                  </Badge>
+                                </div>
+                                
+                                <div>
+                                  {isSelected ? (
+                                    <Select
+                                      value={selectedFields[field.name] || ''}
+                                      onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select property" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {notionProperties.map((property) => (
+                                          <SelectItem key={property} value={property}>
+                                            {property}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-purple-500">List field</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Person Fields Section */}
+                      {allAffinityFields.person && allAffinityFields.person.length > 0 && (
+                        <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
+                          <p className="text-xs font-medium text-orange-800 mb-2">Person Fields</p>
+                          {allAffinityFields.person.map((field: any) => {
+                            const isSelected = selectedFields.hasOwnProperty(field.name);
+                            return (
+                              <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-orange-100 last:border-b-0">
+                                <div className="flex items-center">
+                                  <Checkbox
+                                    id={`person-${field.id}`}
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="outline" className="text-xs border-orange-300 text-orange-700">
+                                    {field.name}
+                                  </Badge>
+                                </div>
+                                
+                                <div>
+                                  {isSelected ? (
+                                    <Select
+                                      value={selectedFields[field.name] || ''}
+                                      onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select property" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {notionProperties.map((property) => (
+                                          <SelectItem key={property} value={property}>
+                                            {property}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-orange-500">Person field</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Organization Fields Section */}
+                      {allAffinityFields.organization && allAffinityFields.organization.length > 0 && (
+                        <div className="bg-teal-50 p-3 rounded-lg border border-teal-200">
+                          <p className="text-xs font-medium text-teal-800 mb-2">Organization Fields</p>
+                          {allAffinityFields.organization.map((field: any) => {
+                            const isSelected = selectedFields.hasOwnProperty(field.name);
+                            return (
+                              <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-teal-100 last:border-b-0">
+                                <div className="flex items-center">
+                                  <Checkbox
+                                    id={`org-${field.id}`}
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="outline" className="text-xs border-teal-300 text-teal-700">
+                                    {field.name}
+                                  </Badge>
+                                </div>
+                                
+                                <div>
+                                  {isSelected ? (
+                                    <Select
+                                      value={selectedFields[field.name] || ''}
+                                      onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select property" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {notionProperties.map((property) => (
+                                          <SelectItem key={property} value={property}>
+                                            {property}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-teal-500">Organization field</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Opportunity Fields Section */}
+                      {allAffinityFields.opportunity && allAffinityFields.opportunity.length > 0 && (
+                        <div className="bg-pink-50 p-3 rounded-lg border border-pink-200">
+                          <p className="text-xs font-medium text-pink-800 mb-2">Opportunity Fields</p>
+                          {allAffinityFields.opportunity.map((field: any) => {
+                            const isSelected = selectedFields.hasOwnProperty(field.name);
+                            return (
+                              <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-pink-100 last:border-b-0">
+                                <div className="flex items-center">
+                                  <Checkbox
+                                    id={`opp-${field.id}`}
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                                  />
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <Badge variant="outline" className="text-xs border-pink-300 text-pink-700">
+                                    {field.name}
+                                  </Badge>
+                                </div>
+                                
+                                <div>
+                                  {isSelected ? (
+                                    <Select
+                                      value={selectedFields[field.name] || ''}
+                                      onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue placeholder="Select property" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {notionProperties.map((property) => (
+                                          <SelectItem key={property} value={property}>
+                                            {property}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <span className="text-xs text-pink-500">Opportunity field</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    /* Fallback to simple fields if comprehensive data not available */
+                    affinityFields?.map((field) => {
+                      const isSelected = selectedFields.hasOwnProperty(field.name);
                       return (
-                        <div key={virtualField.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-blue-100 last:border-b-0">
+                        <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-2 border-b border-gray-100">
                           <div className="flex items-center">
                             <Checkbox
-                              id={`virtual-${virtualField.id}`}
+                              id={`field-${field.id}`}
                               checked={isSelected}
-                              onCheckedChange={(checked) => handleFieldToggle(virtualField.name, !!checked)}
+                              onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
                             />
                           </div>
                           
                           <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
-                              {virtualField.name}
+                            <Badge variant="secondary" className="text-xs">
+                              {field.name}
                             </Badge>
                           </div>
                           
                           <div>
                             {isSelected ? (
                               <Select
-                                value={selectedFields[virtualField.name] || ''}
-                                onValueChange={(value) => handleNotionPropertyChange(virtualField.name, value)}
+                                value={selectedFields[field.name] || ''}
+                                onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
                               >
                                 <SelectTrigger className="h-8">
                                   <SelectValue placeholder="Select property" />
@@ -534,57 +829,13 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <span className="text-xs text-blue-500">{virtualField.description}</span>
+                              <span className="text-sm text-gray-400">Select field first</span>
                             )}
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
-
-                  {/* Regular Affinity Fields */}
-                  {affinityFields.map((field) => {
-                    const isSelected = selectedFields.hasOwnProperty(field.name);
-                    return (
-                      <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-2 border-b border-gray-100">
-                        <div className="flex items-center">
-                          <Checkbox
-                            id={`field-${field.id}`}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
-                          />
-                        </div>
-                        
-                        <div className="flex items-center space-x-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {field.name}
-                          </Badge>
-                        </div>
-                        
-                        <div>
-                          {isSelected ? (
-                            <Select
-                              value={selectedFields[field.name] || ''}
-                              onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select property" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {notionProperties.map((property) => (
-                                  <SelectItem key={property} value={property}>
-                                    {property}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span className="text-sm text-gray-400">Select field first</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                    })
+                  )}
                 </div>
                 
                 {Object.keys(selectedFields).length > 0 && (

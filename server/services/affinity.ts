@@ -225,6 +225,83 @@ export class AffinityService {
     }
   }
 
+  // Get all field types for comprehensive field mapping
+  async getAllFieldTypes(listId?: number): Promise<{
+    globalFields: AffinityField[];
+    listFields: AffinityField[];
+    personFields: AffinityField[];
+    organizationFields: AffinityField[];
+    opportunityFields: AffinityField[];
+  }> {
+    try {
+      // Fetch global fields (no specific entity type)
+      const globalFields = await this.getFields();
+      
+      // Fetch list-specific fields if listId provided
+      let listFields: AffinityField[] = [];
+      if (listId) {
+        listFields = await this.getFields(listId);
+      }
+      
+      // Fetch person-specific fields
+      const personFields = await this.getPersonFields();
+      
+      // Fetch organization-specific fields
+      const organizationFields = await this.getOrganizationFields();
+      
+      // Fetch opportunity-specific fields
+      const opportunityFields = await this.getOpportunityFields();
+      
+      return {
+        globalFields,
+        listFields,
+        personFields,
+        organizationFields,
+        opportunityFields
+      };
+    } catch (error) {
+      console.error('Error fetching all field types:', error);
+      // Return empty arrays to prevent crashes
+      return {
+        globalFields: [],
+        listFields: [],
+        personFields: [],
+        organizationFields: [],
+        opportunityFields: []
+      };
+    }
+  }
+
+  async getPersonFields(): Promise<AffinityField[]> {
+    try {
+      const response = await this.client.get('/v2/persons/fields');
+      return response.data.data || response.data;
+    } catch (error) {
+      console.warn('Person fields endpoint not available:', error);
+      return [];
+    }
+  }
+
+  async getOrganizationFields(): Promise<AffinityField[]> {
+    try {
+      const response = await this.client.get('/v2/organizations/fields');
+      return response.data.data || response.data;
+    } catch (error) {
+      console.warn('Organization fields endpoint not available:', error);
+      return [];
+    }
+  }
+
+  async getOpportunityFields(): Promise<AffinityField[]> {
+    try {
+      const response = await this.client.get('/v2/opportunities/fields');
+      return response.data.data || response.data;
+    } catch (error) {
+      console.warn('Opportunity fields endpoint not available:', error);
+      return [];
+    }
+  }
+
   async getListEntryFieldValues(listId: number, listEntryId: number): Promise<AffinityFieldValue[]> {
     const endpoint = `/v2/lists/${listId}/list-entries/${listEntryId}/fields`;
     const response = await this.client.get(endpoint);

@@ -98,6 +98,17 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 14, 2025: Comprehensive Field Mapping System - All Entity Types Supported
+- **COMPLETED:** Implemented comprehensive field mapping interface with checkbox selection
+- Added support for all four Affinity field types: Global, List-specific, Person, Organization, and Opportunity fields
+- Created `/api/affinity/lists/:id/all-fields` endpoint to fetch organized field data by entity type
+- Enhanced `AffinityService.getAllFieldTypes()` to query all field categories from Affinity API
+- Color-coded field sections in UI: Virtual (blue), Global (green), List (purple), Person (orange), Organization (teal), Opportunity (pink)
+- Replaced one-by-one field addition with intuitive checkbox-based selection interface
+- Users can now select any field from any related entity for opportunities as requested
+- Maintained backward compatibility with existing field mapping data structure
+- Each field type clearly labeled with entity association for better user understanding
+
 ### July 14, 2025: Organization ID Extraction & Notion Number Field Fix
 - **RESOLVED:** Fixed critical Organization ID extraction issue for opportunity entities
 - Organizations are now correctly extracted from the "companies" field in Affinity opportunities

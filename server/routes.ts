@@ -251,6 +251,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // New endpoint for comprehensive field mapping with all entity types
+  app.get("/api/affinity/lists/:id/all-fields", async (req, res) => {
+    try {
+      const listId = parseInt(req.params.id);
+      const allFields = await affinityService.getAllFieldTypes(listId);
+      
+      // Add virtual fields for entity data
+      const virtualFields = [
+        {
+          id: -1,
+          name: "Entity Name",
+          list_id: listId,
+          value_type: 1,
+          allows_multiple: false,
+          track_changes: false,
+          field_type: "virtual",
+          entity_type: "all"
+        },
+        {
+          id: -2,
+          name: "Entity Domain",
+          list_id: listId,
+          value_type: 1,
+          allows_multiple: false,
+          track_changes: false,
+          field_type: "virtual",
+          entity_type: "organization"
+        },
+        {
+          id: -3,
+          name: "Entity Type",
+          list_id: listId,
+          value_type: 1,
+          allows_multiple: false,
+          track_changes: false,
+          field_type: "virtual",
+          entity_type: "all"
+        },
+        {
+          id: -7,
+          name: "Organization ID",
+          list_id: listId,
+          value_type: 2,
+          allows_multiple: false,
+          track_changes: false,
+          field_type: "virtual",
+          entity_type: "organization"
+        }
+      ];
+
+      // Organize fields by type with metadata
+      const organizedFields = {
+        virtual: virtualFields,
+        global: allFields.globalFields.map(f => ({ ...f, field_type: "global", entity_type: "all" })),
+        list: allFields.listFields.map(f => ({ ...f, field_type: "list", entity_type: "all" })),
+        person: allFields.personFields.map(f => ({ ...f, field_type: "person", entity_type: "person" })),
+        organization: allFields.organizationFields.map(f => ({ ...f, field_type: "organization", entity_type: "organization" })),
+        opportunity: allFields.opportunityFields.map(f => ({ ...f, field_type: "opportunity", entity_type: "opportunity" }))
+      };
+
+      res.json(organizedFields);
+    } catch (error) {
+      res.status(500).json({ 
+        error: "Failed to fetch all field types",
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   app.get("/api/affinity/lists/:id/entries", async (req, res) => {
     try {
       const listId = parseInt(req.params.id);
