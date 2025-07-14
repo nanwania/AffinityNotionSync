@@ -21,11 +21,11 @@ export function Modal({ isOpen, onClose, title, children, size = "lg" }: ModalPr
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className={`bg-white rounded-lg shadow-xl ${sizeClasses[size]} w-full max-h-[80vh] overflow-y-auto`}>
-        <div className="px-6 py-4 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className={`bg-background border border-border rounded-lg shadow-xl ${sizeClasses[size]} w-full max-h-[80vh] overflow-y-auto`}>
+        <div className="px-6 py-4 border-b border-border">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>

@@ -230,7 +230,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                   <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h4 className="font-medium text-gray-900">Affinity Configuration</h4>
+              <h4 className="font-medium text-foreground">Affinity Configuration</h4>
             </div>
 
             <div className="space-y-3">
@@ -342,7 +342,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                   <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
                 </svg>
               </div>
-              <h4 className="font-medium text-gray-900">Notion Configuration</h4>
+              <h4 className="font-medium text-foreground">Notion Configuration</h4>
             </div>
 
             <div className="space-y-3">
@@ -386,9 +386,9 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
 
         {/* Field Mapping */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Field Mapping</h4>
+          <h4 className="font-medium text-foreground">Field Mapping</h4>
           
-          <div className="bg-gray-50 rounded-lg p-4">
+          <div className="bg-muted rounded-lg p-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
               <div>
                 <Label htmlFor="affinityField">Affinity Field</Label>
@@ -481,7 +481,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
             {/* Existing Mappings */}
             <div className="space-y-2">
               {fieldMappings.map((mapping, index) => (
-                <div key={index} className="flex items-center justify-between bg-white p-3 rounded border">
+                <div key={index} className="flex items-center justify-between bg-background p-3 rounded border border-border">
                   <div className="flex items-center space-x-4">
                     <Badge variant="outline">{mapping.affinityField}</Badge>
                     <ArrowRight className="h-4 w-4 text-gray-400" />
@@ -498,7 +498,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
                 </div>
               ))}
               {fieldMappings.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4">
                   No field mappings configured yet. Add mappings above to sync data between fields.
                 </p>
               )}
