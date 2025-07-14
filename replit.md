@@ -112,6 +112,16 @@ The application is designed to be deployed on Replit with automatic database pro
 - Users can now select any field from any related entity as requested - person fields linked to people_id and organization fields linked to organization_id
 - System provides exactly what was requested: complete access to all field types stored in Affinity
 
+### July 14, 2025: Smart Property Creation & Data Conversion Fixes
+- **✅ Create New Property Feature:** Added "Create new property" option as last item in all Notion property dropdowns
+- **✅ Intelligent Type Mapping:** Automatically maps Affinity field types to appropriate Notion property types (text→rich_text, dropdown→select/multi_select, number→number, etc.)
+- **✅ Auto-Property Creation:** When "Create new property" selected, automatically creates property using Affinity field name with correct type
+- **✅ Organization Object Fix:** Fixed "[object Object]" issue - now properly extracts organization names from complex objects
+- **✅ Location Field Fix:** Resolved empty location fields by removing null value filtering and handling empty rich_text properly
+- **✅ Property Type Correction:** Fixed Location field type from email to rich_text for proper address data handling
+- Enhanced `convertAffinityToNotionProperty()` with smart object parsing for organizations, locations, and complex data structures
+- All 83 field types now properly sync with correct data representation in Notion
+
 ### July 14, 2025: Organization ID Extraction & Notion Number Field Fix
 - **RESOLVED:** Fixed critical Organization ID extraction issue for opportunity entities
 - Organizations are now correctly extracted from the "companies" field in Affinity opportunities

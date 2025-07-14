@@ -739,16 +739,12 @@ export class SyncService {
         }
       }
       
-      if (value !== null) {
-        const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
-        console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
-        notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
-          value, 
-          propertyType
-        );
-      } else {
-        console.log(`[DEBUG] Skipping null value for field: ${mapping.affinityField} -> ${mapping.notionProperty}`);
-      }
+      const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
+      console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
+      notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
+        value, 
+        propertyType
+      );
     }
 
     return notionProperties;

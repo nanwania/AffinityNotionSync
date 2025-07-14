@@ -230,8 +230,52 @@ export class NotionService {
           title: [{ type: 'text', text: { content: String(affinityValue || '') } }]
         };
       case 'rich_text':
+        let textValue = affinityValue;
+        
+        // Handle organization arrays: [{"id":123,"name":"Company","domain":"example.com"}]
+        if (Array.isArray(affinityValue) && affinityValue.length > 0) {
+          if (affinityValue[0] && typeof affinityValue[0] === 'object' && affinityValue[0].name) {
+            // Extract organization names
+            textValue = affinityValue.map(org => org.name).join(', ');
+          }
+        }
+        // Handle single organization object: {"id":123,"name":"Company","domain":"example.com"}
+        else if (affinityValue && typeof affinityValue === 'object' && affinityValue.name) {
+          textValue = affinityValue.name;
+        }
+        // Handle location objects or other complex objects
+        else if (affinityValue && typeof affinityValue === 'object') {
+          // If it's an object with a 'text' property, use that
+          if (affinityValue.text) {
+            textValue = affinityValue.text;
+          }
+          // If it's an object with a 'name' property, use that
+          else if (affinityValue.name) {
+            textValue = affinityValue.name;
+          }
+          // If it has an address-like structure
+          else if (affinityValue.street_address || affinityValue.city || affinityValue.state) {
+            const parts = [
+              affinityValue.street_address,
+              affinityValue.city,
+              affinityValue.state,
+              affinityValue.postal_code,
+              affinityValue.country
+            ].filter(Boolean);
+            textValue = parts.join(', ');
+          }
+          // Otherwise try to JSON stringify it as a fallback
+          else {
+            try {
+              textValue = JSON.stringify(affinityValue);
+            } catch {
+              textValue = String(affinityValue);
+            }
+          }
+        }
+        
         return {
-          rich_text: [{ type: 'text', text: { content: String(affinityValue || '') } }]
+          rich_text: [{ type: 'text', text: { content: String(textValue || '') } }]
         };
       case 'number':
         if (affinityValue === null || affinityValue === undefined || affinityValue === '') {
