@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ArrowRight } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Trash2, ArrowRight, ArrowRightLeft } from "lucide-react";
 import { SyncPair } from "@shared/schema";
 import { useCreateSyncPair, useUpdateSyncPair } from "@/hooks/use-sync-pairs";
 import { useToast } from "@/hooks/use-toast";
@@ -35,10 +36,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
   });
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>([]);
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
-  const [newMapping, setNewMapping] = useState<FieldMapping>({
-    affinityField: "",
-    notionProperty: "",
-  });
+  const [selectedFields, setSelectedFields] = useState<{[key: string]: string}>({});
   const [newPropertyName, setNewPropertyName] = useState("");
   const [newPropertyType, setNewPropertyType] = useState("rich_text");
   const [creatingProperty, setCreatingProperty] = useState(false);
@@ -91,6 +89,13 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
       });
       setFieldMappings(syncPair.fieldMappings as FieldMapping[] || []);
       setStatusFilters(syncPair.statusFilters as string[] || []);
+      
+      // Convert existing field mappings to selectedFields format
+      const selectedFieldsMap: {[key: string]: string} = {};
+      (syncPair.fieldMappings as FieldMapping[] || []).forEach(mapping => {
+        selectedFieldsMap[mapping.affinityField] = mapping.notionProperty;
+      });
+      setSelectedFields(selectedFieldsMap);
     } else {
       // Reset form for new sync pair
       setFormData({
@@ -102,25 +107,59 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
       });
       setFieldMappings([]);
       setStatusFilters([]);
+      setSelectedFields({});
     }
   }, [syncPair, isOpen]);
 
-  const handleAddMapping = () => {
-    if (newMapping.affinityField && newMapping.notionProperty) {
-      const affinityField = affinityFields?.find(f => f.name === newMapping.affinityField);
-      setFieldMappings([
-        ...fieldMappings,
-        {
-          ...newMapping,
-          affinityFieldId: affinityField?.id,
-        },
-      ]);
-      setNewMapping({ affinityField: "", notionProperty: "" });
+  const handleFieldToggle = (affinityFieldName: string, checked: boolean) => {
+    if (checked) {
+      // Default to same name for Notion property
+      const defaultNotionProperty = notionProperties.includes(affinityFieldName) 
+        ? affinityFieldName 
+        : notionProperties[0] || '';
+      setSelectedFields(prev => ({
+        ...prev,
+        [affinityFieldName]: defaultNotionProperty
+      }));
+    } else {
+      setSelectedFields(prev => {
+        const newFields = { ...prev };
+        delete newFields[affinityFieldName];
+        return newFields;
+      });
     }
   };
 
-  const handleRemoveMapping = (index: number) => {
-    setFieldMappings(fieldMappings.filter((_, i) => i !== index));
+  const handleNotionPropertyChange = (affinityFieldName: string, notionProperty: string) => {
+    setSelectedFields(prev => ({
+      ...prev,
+      [affinityFieldName]: notionProperty
+    }));
+  };
+
+  // Convert selectedFields to fieldMappings format for submission
+  const getFieldMappings = (): FieldMapping[] => {
+    return Object.entries(selectedFields).map(([affinityField, notionProperty]) => {
+      // Handle virtual fields with negative IDs
+      const virtualFields: {[key: string]: number} = {
+        "Organization ID": -7,
+        "Entity Name": -1,
+        "Entity Type": -3,
+        "Entity Domain": -2,
+        "Name": -4,
+        "Opportunity ID": -5,
+        "Organization Name": -6
+      };
+      
+      const affinityFieldData = affinityFields?.find(f => f.name === affinityField);
+      const fieldId = virtualFields[affinityField] || affinityFieldData?.id;
+      
+      return {
+        affinityField,
+        notionProperty,
+        affinityFieldId: fieldId,
+      };
+    });
   };
 
   const handleSubmit = async () => {
@@ -141,7 +180,7 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
         ...formData,
         affinityListName: affinityList.name,
         notionDatabaseName: notionDb.title?.[0]?.text?.content || "Untitled Database",
-        fieldMappings: fieldMappings,
+        fieldMappings: getFieldMappings(),
         statusFilters: statusFilters,
       };
 
@@ -384,126 +423,189 @@ export function SyncConfigModal({ isOpen, onClose, syncPair }: SyncConfigModalPr
           </div>
         </div>
 
-        {/* Field Mapping */}
+        {/* Field Mapping - Checkbox Interface */}
         <div className="space-y-4">
-          <h4 className="font-medium text-foreground">Field Mapping</h4>
+          <div className="flex items-center space-x-2">
+            <ArrowRightLeft className="h-5 w-5 text-blue-600" />
+            <h4 className="font-medium text-foreground">Field Mapping</h4>
+          </div>
+          <p className="text-sm text-gray-600">
+            Select the Affinity fields you want to sync and choose their corresponding Notion properties.
+          </p>
           
-          <div className="bg-muted rounded-lg p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-              <div>
-                <Label htmlFor="affinityField">Affinity Field</Label>
-                <Select 
-                  value={newMapping.affinityField} 
-                  onValueChange={(value) => setNewMapping({ ...newMapping, affinityField: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {affinityFields?.map((field) => (
-                      <SelectItem key={field.id} value={field.name}>
-                        {field.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="notionProperty">Notion Property</Label>
-                <div className="space-y-2">
-                  <Select 
-                    value={newMapping.notionProperty} 
-                    onValueChange={(value) => setNewMapping({ ...newMapping, notionProperty: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select property" />
+          {!formData.affinityListId || !formData.notionDatabaseId ? (
+            <div className="bg-muted rounded-lg p-6 text-center">
+              <p className="text-sm text-gray-500">
+                Please select both an Affinity list and Notion database first to configure field mappings.
+              </p>
+            </div>
+          ) : !affinityFields || affinityFields.length === 0 ? (
+            <div className="bg-muted rounded-lg p-6 text-center">
+              <p className="text-sm text-gray-500">Loading field options...</p>
+            </div>
+          ) : (
+            <div className="bg-muted rounded-lg p-4">
+              {/* Create New Notion Property Section */}
+              <div className="mb-6 p-4 bg-background rounded-lg border border-dashed border-gray-300">
+                <Label className="text-sm font-medium mb-2 block">Create New Notion Property</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Property name"
+                    value={newPropertyName}
+                    onChange={(e) => setNewPropertyName(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Select value={newPropertyType} onValueChange={setNewPropertyType}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {notionProperties.map((property) => (
-                        <SelectItem key={property} value={property}>
-                          {property}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="rich_text">Text</SelectItem>
+                      <SelectItem value="number">Number</SelectItem>
+                      <SelectItem value="select">Select</SelectItem>
+                      <SelectItem value="multi_select">Multi-select</SelectItem>
+                      <SelectItem value="date">Date</SelectItem>
+                      <SelectItem value="checkbox">Checkbox</SelectItem>
+                      <SelectItem value="url">URL</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
                     </SelectContent>
                   </Select>
-                  
-                  <div className="text-xs text-gray-500">
-                    Or create a new property:
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="New property name"
-                      value={newPropertyName}
-                      onChange={(e) => setNewPropertyName(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Select 
-                      value={newPropertyType} 
-                      onValueChange={setNewPropertyType}
-                    >
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="rich_text">Text</SelectItem>
-                        <SelectItem value="number">Number</SelectItem>
-                        <SelectItem value="select">Select</SelectItem>
-                        <SelectItem value="multi_select">Multi-select</SelectItem>
-                        <SelectItem value="date">Date</SelectItem>
-                        <SelectItem value="checkbox">Checkbox</SelectItem>
-                        <SelectItem value="url">URL</SelectItem>
-                        <SelectItem value="email">Email</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      onClick={handleCreateProperty}
-                      disabled={!newPropertyName || !formData.notionDatabaseId || creatingProperty}
-                      className="bg-blue-600 hover:bg-blue-700"
-                      size="sm"
-                    >
-                      {creatingProperty ? "Creating..." : "Create"}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-end">
-                <Button onClick={handleAddMapping} className="bg-green-600 hover:bg-green-700">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-            </div>
-
-            {/* Existing Mappings */}
-            <div className="space-y-2">
-              {fieldMappings.map((mapping, index) => (
-                <div key={index} className="flex items-center justify-between bg-background p-3 rounded border border-border">
-                  <div className="flex items-center space-x-4">
-                    <Badge variant="outline">{mapping.affinityField}</Badge>
-                    <ArrowRight className="h-4 w-4 text-gray-400" />
-                    <Badge variant="outline">{mapping.notionProperty}</Badge>
-                  </div>
                   <Button
-                    variant="ghost"
+                    type="button"
+                    onClick={handleCreateProperty}
+                    disabled={!newPropertyName || !formData.notionDatabaseId || creatingProperty}
+                    className="bg-blue-600 hover:bg-blue-700"
                     size="sm"
-                    onClick={() => handleRemoveMapping(index)}
-                    className="text-red-600 hover:text-red-700"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {creatingProperty ? "Creating..." : "Create"}
                   </Button>
                 </div>
-              ))}
-              {fieldMappings.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No field mappings configured yet. Add mappings above to sync data between fields.
-                </p>
-              )}
+              </div>
+
+              {/* Field Selection Grid */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-4 text-sm font-medium text-gray-700 border-b pb-2">
+                  <div>Sync</div>
+                  <div>Affinity Field</div>
+                  <div>→ Notion Property</div>
+                </div>
+                
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {/* Virtual Fields Section */}
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                    <p className="text-xs font-medium text-blue-800 mb-2">Virtual Fields (Auto-generated)</p>
+                    {[
+                      { name: "Organization ID", id: -7, description: "ID of the associated organization" },
+                      { name: "Entity Name", id: -1, description: "Name of the entity" },
+                      { name: "Entity Type", id: -3, description: "Type (Person/Organization/Opportunity)" }
+                    ].map((virtualField) => {
+                      const isSelected = selectedFields.hasOwnProperty(virtualField.name);
+                      return (
+                        <div key={virtualField.id} className="grid grid-cols-3 gap-4 items-center py-1 border-b border-blue-100 last:border-b-0">
+                          <div className="flex items-center">
+                            <Checkbox
+                              id={`virtual-${virtualField.id}`}
+                              checked={isSelected}
+                              onCheckedChange={(checked) => handleFieldToggle(virtualField.name, !!checked)}
+                            />
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline" className="text-xs border-blue-300 text-blue-700">
+                              {virtualField.name}
+                            </Badge>
+                          </div>
+                          
+                          <div>
+                            {isSelected ? (
+                              <Select
+                                value={selectedFields[virtualField.name] || ''}
+                                onValueChange={(value) => handleNotionPropertyChange(virtualField.name, value)}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="Select property" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {notionProperties.map((property) => (
+                                    <SelectItem key={property} value={property}>
+                                      {property}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-xs text-blue-500">{virtualField.description}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Regular Affinity Fields */}
+                  {affinityFields.map((field) => {
+                    const isSelected = selectedFields.hasOwnProperty(field.name);
+                    return (
+                      <div key={field.id} className="grid grid-cols-3 gap-4 items-center py-2 border-b border-gray-100">
+                        <div className="flex items-center">
+                          <Checkbox
+                            id={`field-${field.id}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleFieldToggle(field.name, !!checked)}
+                          />
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {field.name}
+                          </Badge>
+                        </div>
+                        
+                        <div>
+                          {isSelected ? (
+                            <Select
+                              value={selectedFields[field.name] || ''}
+                              onValueChange={(value) => handleNotionPropertyChange(field.name, value)}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="Select property" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {notionProperties.map((property) => (
+                                  <SelectItem key={property} value={property}>
+                                    {property}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-sm text-gray-400">Select field first</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {Object.keys(selectedFields).length > 0 && (
+                  <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-sm font-medium text-green-800 mb-2">
+                      Selected Mappings ({Object.keys(selectedFields).length}):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(selectedFields).map(([affinityField, notionProperty]) => (
+                        <div key={affinityField} className="flex items-center space-x-1 text-xs bg-white px-2 py-1 rounded border">
+                          <span className="text-blue-600">{affinityField}</span>
+                          <ArrowRight className="h-3 w-3 text-gray-400" />
+                          <span className="text-green-600">{notionProperty}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="flex justify-end space-x-3">
