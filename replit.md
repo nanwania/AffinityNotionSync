@@ -95,3 +95,18 @@ The application uses four main tables:
 - **Cartographer**: Replit-specific development tooling
 
 The application is designed to be deployed on Replit with automatic database provisioning and environment variable management. The development workflow supports hot reloading and integrated debugging tools.
+
+## Recent Changes
+
+### July 14, 2025: Status Filtering Implementation
+- Added status filtering capability to sync pairs
+- Users can now select specific statuses from Affinity lists to sync (e.g., "Deep Diligence", "Early Diligence")
+- Updated database schema to include `statusFilters` field in sync pairs table
+- Implemented filtering logic in sync service to only process entries with selected statuses
+- Added UI components in sync configuration modal for status selection
+- Status filtering works for both unidirectional and bidirectional sync operations
+
+### Previous: Organization Data Access
+- Fixed organization data access from Affinity API
+- Added Entity Name, Entity Domain, and Entity Type virtual fields for mapping
+- Organization information now properly accessible for sync configuration
