@@ -736,75 +736,23 @@ export class SyncService {
             }
             break;
         }
-      } else {
+      } else if (mapping.affinityFieldId) {
         // Handle regular field values
         const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         if (fieldValue) {
           value = fieldValue.value;
-          
-          // Special handling for organization fields - extract from companies field if it's a virtual organization field
-          if (mapping.affinityField === 'Organizations' && affinityEntry) {
-            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
-            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data)) {
-              value = organizationField.value.data; // Full organization objects with name, id, domain
-            }
-          }
-
-          // Special handling for Location field - extract from organization's enriched data  
-          if (mapping.affinityField === 'Location' && affinityEntry) {
-            // For opportunities, get location from the linked organization
-            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
-            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
-              const organizationData = organizationField.value.data[0];
-              
-              // Check if location is embedded in the organization data from the companies field
-              if (organizationData.location) {
-                value = organizationData.location;
-                console.log(`[DEBUG] Location extracted from organization enriched data: ${value}`);
-              } else if (organizationData.id) {
-                // Fetch the full organization to get all available properties including location
-                try {
-                  console.log(`[DEBUG] Fetching full organization data for ${organizationData.name} (ID: ${organizationData.id})`);
-                  const fullOrganization = await affinityService.getOrganization(organizationData.id);
-                  
-                  // Check various location properties that Affinity might use
-                  if (fullOrganization.location) {
-                    value = fullOrganization.location;
-                    console.log(`[DEBUG] Location found in organization.location: ${value}`);
-                  } else if (fullOrganization.headquarters) {
-                    value = fullOrganization.headquarters;
-                    console.log(`[DEBUG] Location found in organization.headquarters: ${value}`);
-                  } else if (fullOrganization.address) {
-                    value = fullOrganization.address;
-                    console.log(`[DEBUG] Location found in organization.address: ${value}`);
-                  } else if (fullOrganization.city) {
-                    value = fullOrganization.city;
-                    console.log(`[DEBUG] Location found in organization.city: ${value}`);
-                  } else {
-                    console.log(`[DEBUG] No location found for ${organizationData.name}. Available org properties:`, Object.keys(fullOrganization));
-                    
-                    // As a last resort, check if there are any field values with location data
-                    if (fullOrganization.field_values && Array.isArray(fullOrganization.field_values)) {
-                      const locationField = fullOrganization.field_values.find(fv => 
-                        fv.field && (
-                          fv.field.name?.toLowerCase().includes('location') ||
-                          fv.field.name?.toLowerCase().includes('address') ||
-                          fv.field.name?.toLowerCase().includes('city') ||
-                          fv.field.name?.toLowerCase().includes('headquarters')
-                        )
-                      );
-                      if (locationField && locationField.value) {
-                        value = locationField.value;
-                        console.log(`[DEBUG] Location found in field_values: ${value} (field: ${locationField.field.name})`);
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`[DEBUG] Could not fetch organization ${organizationData.id} for location:`, error.message);
-                }
-              }
-            }
-          }
+        }
+      } else {
+        // For fields without affinityFieldId, this is likely a configuration issue
+        console.log(`[DEBUG] Field ${mapping.affinityField} has no affinityFieldId - this should be mapped to a proper field ID`);
+        value = null;
+      }
+      
+      // Special handling for organization fields - extract from companies field if it's a virtual organization field
+      if (mapping.affinityField === 'Organizations' && affinityEntry) {
+        const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
+        if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data)) {
+          value = organizationField.value.data; // Full organization objects with name, id, domain
         }
       }
       
