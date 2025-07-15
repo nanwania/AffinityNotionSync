@@ -202,6 +202,8 @@ export class SyncService {
     let recordsDeleted = 0;
     let conflictsFound = 0;
     const details: any = {};
+    
+    console.log(`[AFFINITY->NOTION] Starting Affinity-to-Notion sync phase`);
 
     try {
       // Get Affinity list entries with optional pre-filtering for performance
@@ -278,6 +280,7 @@ export class SyncService {
             // If we have a synced record and the hash matches, skip this entry
             if (syncedRecord && syncedRecord.fieldValuesHash === currentFieldHash) {
               // Values haven't changed since last sync - no update needed
+              console.log(`[AFFINITY->NOTION] Skipping entry ${affinityId} - no field changes detected since last sync`);
               return { type: 'unchanged', count: 0 };
             }
 
@@ -288,6 +291,7 @@ export class SyncService {
             }
 
             // Update existing page
+            console.log(`[AFFINITY->NOTION] Updating existing Notion page for entry ${affinityId} with properties: ${JSON.stringify(notionProperties)}`);
             await notionService.updatePage(existingNotionPage.id, notionProperties);
             
             // Update or create synced record
@@ -306,7 +310,9 @@ export class SyncService {
             return { type: 'updated', count: 1 };
           } else {
             // Create new page
+            console.log(`[AFFINITY->NOTION] Creating new Notion page for entry ${affinityId} with properties: ${JSON.stringify(notionProperties)}`);
             const newPage = await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
+            console.log(`[AFFINITY->NOTION] Successfully created page ${newPage.id} for entry ${affinityId}`);
             const currentFieldHash = this.normalizeAndHashFieldValues(fieldValues, syncPair.fieldMappings as FieldMapping[]);
             
             // Create synced record for the new page
@@ -762,10 +768,11 @@ export class SyncService {
       
       const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
       console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
-      notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
-        value, 
-        propertyType
-      );
+      
+      const convertedProperty = notionService.convertAffinityToNotionProperty(value, propertyType);
+      console.log(`[DEBUG] Converted property result: ${JSON.stringify(convertedProperty)}`);
+      
+      notionProperties[mapping.notionProperty] = convertedProperty;
     }
 
     return notionProperties;
