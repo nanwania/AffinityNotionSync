@@ -75,24 +75,6 @@ export const syncedRecords = pgTable("synced_records", {
   notionPageIdIndex: index("synced_records_notion_page_id_idx").on(table.notionPageId)
 }));
 
-// New table to store complete Affinity field data for each opportunity
-export const affinityFieldData = pgTable("affinity_field_data", {
-  id: serial("id").primaryKey(),
-  affinityId: text("affinity_id").notNull(),
-  recordType: text("record_type").notNull(), // opportunity, person, organization
-  fieldData: jsonb("field_data").notNull(), // Complete field data from Affinity API
-  organizationData: jsonb("organization_data"), // Cached organization field data
-  personData: jsonb("person_data"), // Cached person field data  
-  lastFetchedAt: timestamp("last_fetched_at").defaultNow().notNull(),
-  affinityLastModified: timestamp("affinity_last_modified").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull()
-}, (table) => ({
-  uniqueAffinity: unique().on(table.affinityId),
-  affinityIdIndex: index("affinity_field_data_affinity_id_idx").on(table.affinityId),
-  recordTypeIndex: index("affinity_field_data_record_type_idx").on(table.recordType)
-}));
-
 export const syncPairsRelations = relations(syncPairs, ({ many }) => ({
   syncHistory: many(syncHistory),
   conflicts: many(conflicts),
@@ -118,10 +100,6 @@ export const syncedRecordsRelations = relations(syncedRecords, ({ one }) => ({
     fields: [syncedRecords.syncPairId],
     references: [syncPairs.id],
   }),
-}));
-
-export const affinityFieldDataRelations = relations(affinityFieldData, ({ one }) => ({
-  // No direct relations needed for this table
 }));
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -151,12 +129,6 @@ export const insertSyncedRecordSchema = createInsertSchema(syncedRecords).omit({
   updatedAt: true,
 });
 
-export const insertAffinityFieldDataSchema = createInsertSchema(affinityFieldData).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type SyncPair = typeof syncPairs.$inferSelect;
@@ -167,5 +139,3 @@ export type Conflict = typeof conflicts.$inferSelect;
 export type InsertConflict = z.infer<typeof insertConflictSchema>;
 export type SyncedRecord = typeof syncedRecords.$inferSelect;
 export type InsertSyncedRecord = z.infer<typeof insertSyncedRecordSchema>;
-export type AffinityFieldData = typeof affinityFieldData.$inferSelect;
-export type InsertAffinityFieldData = z.infer<typeof insertAffinityFieldDataSchema>;

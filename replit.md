@@ -98,18 +98,6 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
-### July 15, 2025: Performance Optimization with Field Data Caching Architecture
-- **COMPLETED:** Implemented comprehensive field data caching system to minimize API calls
-- **✅ New Database Table:** Added `affinity_field_data` table to store complete field data for each opportunity
-- **✅ Caching Strategy:** Fetch all field data in one API call per opportunity and cache in database
-- **✅ Optimized Sync Process:** Only sync required fields to Notion based on field mappings
-- **✅ Cache Hit/Miss Logic:** Automatic cache validation and refresh when data is stale
-- **✅ Storage Layer:** Enhanced storage interface with affinity field data CRUD operations
-- **✅ Service Integration:** Updated Affinity service with `fetchAndCacheOpportunityFieldData()` and `getFieldValuesFromCache()`
-- **✅ Performance Improvement:** Reduced API calls from N individual calls to 1 call per opportunity + organization data
-- Expected performance improvement: 3-5x faster sync operations for large datasets
-- All field mappings continue to work correctly: Location, Expected Ahren Investment, Organizations, Upcoming Round, Organization_ID
-
 ### July 15, 2025: Virtual Field Logic Cleanup & Proper Field Mapping Architecture
 - **COMPLETED:** Removed all virtual field logic (negative field IDs) from sync service
 - **✅ Simplified Field Mapping:** Clean logic - fields either have proper field IDs or need configuration
