@@ -708,11 +708,26 @@ export class SyncService {
       
       // Handle field mapping with proper field IDs
       if (mapping.affinityFieldId && affinityEntry) {
-        // First, try to find the field value in opportunity fields
-        const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
-        if (fieldValue) {
-          value = fieldValue.value;
-        } else {
+        // Special handling for Organization ID field
+        if (mapping.affinityField === 'Organization ID' && mapping.affinityFieldId === 'companies') {
+          console.log(`[DEBUG] Organization ID field detected - field ID: ${mapping.affinityFieldId}`);
+          const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies');
+          if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+            value = organizationField.value.data[0].id;
+            console.log(`[DEBUG] Organization ID extracted: ${value} (${organizationField.value.data[0].name})`);
+          } else {
+            console.log(`[DEBUG] Organization ID - no companies field found or empty`);
+            console.log(`[DEBUG] organizationField:`, organizationField);
+            value = null;
+          }
+        } 
+        // Regular field processing
+        else {
+          // First, try to find the field value in opportunity fields
+          const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
+          if (fieldValue) {
+            value = fieldValue.value;
+          } else {
           // If not found in opportunity, check if this is an organization field like Location
           if (mapping.affinityField === 'Location' && mapping.affinityFieldId) {
             // For Location field, fetch it from the linked organization using API
@@ -749,12 +764,6 @@ export class SyncService {
             console.log(`[DEBUG] Field ${mapping.affinityFieldId} not found in opportunity fields`);
           }
         }
-      } else if (mapping.affinityField === 'Organization ID' && affinityEntry) {
-        // Special case: Organization ID extraction from companies field
-        const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies');
-        if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
-          value = organizationField.value.data[0].id.toString();
-          console.log(`[DEBUG] Organization ID extracted: ${value} (${organizationField.value.data[0].name})`);
         }
       } else if (mapping.affinityField === 'Location') {
         // Location field without field ID - needs to be configured
