@@ -103,9 +103,10 @@ The application is designed to be deployed on Replit with automatic database pro
   - Fixed obsolete virtual field ID (-7) by updating to use "companies" field 
   - Implemented proper extraction logic to get organization ID numbers (e.g., 296778106, 65914191)
   - Organization IDs now sync correctly to Notion number fields
-- **✅ Description Field Working:** Added missing field ID mapping for Description field
-  - Updated field mapping to use proper field ID: field-5190714
-  - Description values now sync correctly from Affinity to Notion rich_text fields
+- **✅ Description Field Working:** Fixed incorrect field mapping for Description field
+  - Changed from "Expected Close Date" (field-5190714) to "Ahren Description" (field-5190739)
+  - Description now shows proper business context text instead of date/time codes
+  - Example: "Owkin spinning off its AI pathology business. $10.5M deal with Merck..."
 - **✅ Location Field Working:** Successfully fetches organization location data using proper field ID mapping
   - Location data syncs correctly from linked organizations (e.g., "New York, New York, United States")
 - **✅ All Critical Fields Operational:** Organization ID, Description, and Location all working perfectly
