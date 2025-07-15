@@ -795,8 +795,15 @@ export class AffinityService {
       const response = await this.client.get(`/v2/opportunities/${opportunityId}`);
       const opportunity = response.data;
       
-      // Extract embedded field data
+      // Extract embedded field data - the v2 API stores fields in opportunity.fields array
       const fieldData = opportunity.fields || [];
+      console.log(`[CACHE DEBUG] Opportunity ${opportunityId} has ${fieldData.length} embedded fields`);
+      
+      // Debug: log field IDs to verify what's available
+      if (fieldData.length > 0) {
+        const fieldIds = fieldData.map(f => f.id);
+        console.log(`[CACHE DEBUG] Available field IDs: ${fieldIds.join(', ')}`);
+      }
       
       // Also fetch linked organization data if available
       let organizationData = null;
