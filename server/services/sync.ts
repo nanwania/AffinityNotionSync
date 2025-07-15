@@ -700,61 +700,27 @@ export class SyncService {
     for (const mapping of fieldMappings) {
       let value = null;
       
-      // Handle virtual fields (negative IDs)
-      if (mapping.affinityFieldId && mapping.affinityFieldId < 0 && affinityEntry) {
-        switch (mapping.affinityFieldId) {
-          case -1: // Entity Name
-            value = affinityEntry.entity.name;
-            break;
-          case -2: // Entity Domain
-            value = affinityEntry.entity.domain || (affinityEntry.entity.domains && affinityEntry.entity.domains[0]) || null;
-            break;
-          case -3: // Entity Type
-            value = affinityEntry.entity_type === 1 ? 'Organization' : affinityEntry.entity_type === 0 ? 'Person' : 'Opportunity';
-            break;
-          case -4: // Name (same as Entity Name)
-            value = affinityEntry.entity.name;
-            break;
-          case -5: // Opportunity ID
-            value = affinityEntry.entity_type === 2 ? affinityEntry.entity.id.toString() : null;
-            break;
-          case -6: // Organization Name
-            value = affinityEntry.entity_type === 1 ? affinityEntry.entity.name : null;
-            break;
-          case -7: // Organization ID
-            // For opportunities, extract Organization ID from the "companies" field
-            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
-            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
-              // Get the first organization's ID from the companies field
-              value = organizationField.value.data[0].id.toString();
-              console.log(`[DEBUG] Organization ID extracted from companies field: ${value} (${organizationField.value.data[0].name})`);
-            } else {
-              // Fallback: if it's directly an organization entity (entity_type=1)
-              const entityType = affinityEntry.entity_type || affinityEntry.entity.type;
-              value = entityType === 1 ? affinityEntry.entity.id.toString() : null;
-              console.log(`[DEBUG] Organization ID fallback check: entity_type=${entityType}, value=${value}`);
-            }
-            break;
-        }
-      } else if (mapping.affinityFieldId) {
-        // Handle regular field values
+      // Handle field mapping with proper field IDs
+      if (mapping.affinityFieldId && affinityEntry) {
+        // Find the field value by field ID
         const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         if (fieldValue) {
           value = fieldValue.value;
+        } else {
+          console.log(`[DEBUG] Field ${mapping.affinityFieldId} not found in opportunity fields`);
+        }
+      } else if (mapping.affinityField === 'Organization ID' && affinityEntry) {
+        // Special case: Organization ID extraction from companies field
+        const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies');
+        if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+          value = organizationField.value.data[0].id.toString();
+          console.log(`[DEBUG] Organization ID extracted: ${value} (${organizationField.value.data[0].name})`);
         }
       } else {
-        // For fields without affinityFieldId, this is likely a configuration issue
-        console.log(`[DEBUG] Field ${mapping.affinityField} has no affinityFieldId - this should be mapped to a proper field ID`);
+        console.log(`[DEBUG] Field ${mapping.affinityField} has no affinityFieldId - needs proper field ID mapping`);
         value = null;
       }
-      
-      // Special handling for organization fields - extract from companies field if it's a virtual organization field
-      if (mapping.affinityField === 'Organizations' && affinityEntry) {
-        const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
-        if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data)) {
-          value = organizationField.value.data; // Full organization objects with name, id, domain
-        }
-      }
+
       
       const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
       console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
@@ -788,9 +754,9 @@ export class SyncService {
     const fieldUpdates: Array<{fieldId: string, value: any}> = [];
 
     for (const mapping of fieldMappings) {
-      // Skip virtual fields - they cannot be updated in Affinity
-      if (mapping.affinityFieldId && mapping.affinityFieldId < 0) {
-        console.log(`[AFFINITY SAFETY] Skipping virtual field ${mapping.affinityField} - cannot update system fields`);
+      // Skip fields without proper field IDs
+      if (!mapping.affinityFieldId) {
+        console.log(`[AFFINITY SAFETY] Skipping field ${mapping.affinityField} - no field ID configured`);
         continue;
       }
 

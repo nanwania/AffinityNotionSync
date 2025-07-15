@@ -98,6 +98,20 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 15, 2025: Virtual Field Logic Cleanup & Proper Field Mapping Architecture
+- **COMPLETED:** Removed all virtual field logic (negative field IDs) from sync service
+- **✅ Simplified Field Mapping:** Clean logic - fields either have proper field IDs or need configuration
+- **✅ Organization ID Extraction:** Correctly extracts from companies field relationship data
+- **✅ Consistent Field Mapping Architecture:** 
+  - Opportunity fields use opportunity field IDs
+  - Organization fields require organization field IDs (Location needs proper mapping)
+  - No more complex virtual field switches or negative ID handling
+- **✅ Clear Error Messages:** Fields without proper IDs show "needs proper field ID mapping"
+- Enhanced debugging shows exact field mapping requirements for proper configuration
+- All field mappings now follow consistent entity-based approach as requested
+
+## Recent Changes
+
 ### July 14, 2025: Complete Field Mapping System - All Entity Types Successfully Implemented
 - **COMPLETED:** Comprehensive field mapping system with 83 total fields across all entity types
 - **✅ Person Fields (35):** Full API v2 integration with job titles, education, LinkedIn, labels, expertise fields
