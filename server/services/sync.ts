@@ -744,6 +744,34 @@ export class SyncService {
               value = organizationField.value.data; // Full organization objects with name, id, domain
             }
           }
+
+          // Special handling for Location field - extract from organization's enriched data
+          if (mapping.affinityField === 'Location' && affinityEntry) {
+            // For opportunities, get location from the linked organization
+            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
+            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+              const organizationData = organizationField.value.data[0];
+              
+              // Try to get location from the organization's enriched data
+              if (organizationData.location) {
+                value = organizationData.location;
+                console.log(`[DEBUG] Location extracted from organization enriched data: ${value}`);
+              } else if (organizationData.id) {
+                // Fetch the full organization to get enriched location data
+                try {
+                  const fullOrganization = await affinityService.getOrganization(organizationData.id);
+                  if (fullOrganization.location) {
+                    value = fullOrganization.location;
+                    console.log(`[DEBUG] Location extracted from full organization: ${value}`);
+                  } else {
+                    console.log(`[DEBUG] No location found for organization ${organizationData.name} (ID: ${organizationData.id})`);
+                  }
+                } catch (error) {
+                  console.warn(`[DEBUG] Could not fetch organization ${organizationData.id} for location:`, error.message);
+                }
+              }
+            }
+          }
         }
       }
       
