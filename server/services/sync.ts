@@ -721,6 +721,7 @@ export class SyncService {
             value = null;
           }
         } 
+
         // Regular field processing
         else {
           // First, try to find the field value in opportunity fields
