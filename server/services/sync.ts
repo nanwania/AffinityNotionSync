@@ -702,12 +702,46 @@ export class SyncService {
       
       // Handle field mapping with proper field IDs
       if (mapping.affinityFieldId && affinityEntry) {
-        // Find the field value by field ID
+        // First, try to find the field value in opportunity fields
         const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         if (fieldValue) {
           value = fieldValue.value;
         } else {
-          console.log(`[DEBUG] Field ${mapping.affinityFieldId} not found in opportunity fields`);
+          // If not found in opportunity, check if this is an organization field like Location
+          if (mapping.affinityField === 'Location' && mapping.affinityFieldId) {
+            // For Location field, fetch it from the linked organization using API
+            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies');
+            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+              const organizationId = organizationField.value.data[0].id;
+              console.log(`[DEBUG] Location is organization field - fetching from organization ${organizationId} using field ID ${mapping.affinityFieldId}`);
+              
+              try {
+                // Fetch organization field values from Affinity
+                const orgFieldValues = await affinityService.getFieldValues(organizationId, 'organization');
+                console.log(`[DEBUG] Fetched ${orgFieldValues.length} field values for organization ${organizationId}`);
+                
+                // Find the location field value using the field ID
+                const numericFieldId = parseInt(mapping.affinityFieldId.toString());
+                console.log(`[DEBUG] Looking for location field ID: ${numericFieldId}`);
+                
+                if (orgFieldValues.length > 0) {
+                  console.log(`[DEBUG] Available organization field IDs: ${orgFieldValues.map(fv => fv.field_id).join(', ')}`);
+                }
+                
+                const locationFieldValue = orgFieldValues.find(fv => fv.field_id === numericFieldId);
+                if (locationFieldValue) {
+                  value = locationFieldValue.value;
+                  console.log(`[DEBUG] Location found: ${JSON.stringify(value)}`);
+                } else {
+                  console.log(`[DEBUG] Location field ${numericFieldId} not found in organization field values`);
+                }
+              } catch (error) {
+                console.error(`[DEBUG] Error fetching organization field values for org ${organizationId}: ${error.message}`);
+              }
+            }
+          } else {
+            console.log(`[DEBUG] Field ${mapping.affinityFieldId} not found in opportunity fields`);
+          }
         }
       } else if (mapping.affinityField === 'Organization ID' && affinityEntry) {
         // Special case: Organization ID extraction from companies field
@@ -716,6 +750,10 @@ export class SyncService {
           value = organizationField.value.data[0].id.toString();
           console.log(`[DEBUG] Organization ID extracted: ${value} (${organizationField.value.data[0].name})`);
         }
+      } else if (mapping.affinityField === 'Location') {
+        // Location field without field ID - needs to be configured
+        console.log(`[DEBUG] Location field needs organization field ID 5174382 to be configured`);
+        value = null;
       } else {
         console.log(`[DEBUG] Field ${mapping.affinityField} has no affinityFieldId - needs proper field ID mapping`);
         value = null;
