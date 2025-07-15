@@ -645,8 +645,13 @@ export class SyncService {
 
   private extractAffinityIdFromNotionPage(page: NotionPage): string | null {
     const affinityIdProperty = page.properties['Affinity_ID'];
-    if (affinityIdProperty && affinityIdProperty.type === 'rich_text') {
-      return affinityIdProperty.rich_text?.[0]?.text?.content || null;
+    if (affinityIdProperty) {
+      if (affinityIdProperty.type === 'rich_text' && affinityIdProperty.rich_text?.[0]?.text?.content) {
+        return affinityIdProperty.rich_text[0].text.content;
+      }
+      if (affinityIdProperty.type === 'number' && affinityIdProperty.number !== null) {
+        return affinityIdProperty.number.toString();
+      }
     }
     return null;
   }
@@ -745,26 +750,54 @@ export class SyncService {
             }
           }
 
-          // Special handling for Location field - extract from organization's enriched data
+          // Special handling for Location field - extract from organization's enriched data  
           if (mapping.affinityField === 'Location' && affinityEntry) {
             // For opportunities, get location from the linked organization
             const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
             if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
               const organizationData = organizationField.value.data[0];
               
-              // Try to get location from the organization's enriched data
+              // Check if location is embedded in the organization data from the companies field
               if (organizationData.location) {
                 value = organizationData.location;
                 console.log(`[DEBUG] Location extracted from organization enriched data: ${value}`);
               } else if (organizationData.id) {
-                // Fetch the full organization to get enriched location data
+                // Fetch the full organization to get all available properties including location
                 try {
+                  console.log(`[DEBUG] Fetching full organization data for ${organizationData.name} (ID: ${organizationData.id})`);
                   const fullOrganization = await affinityService.getOrganization(organizationData.id);
+                  
+                  // Check various location properties that Affinity might use
                   if (fullOrganization.location) {
                     value = fullOrganization.location;
-                    console.log(`[DEBUG] Location extracted from full organization: ${value}`);
+                    console.log(`[DEBUG] Location found in organization.location: ${value}`);
+                  } else if (fullOrganization.headquarters) {
+                    value = fullOrganization.headquarters;
+                    console.log(`[DEBUG] Location found in organization.headquarters: ${value}`);
+                  } else if (fullOrganization.address) {
+                    value = fullOrganization.address;
+                    console.log(`[DEBUG] Location found in organization.address: ${value}`);
+                  } else if (fullOrganization.city) {
+                    value = fullOrganization.city;
+                    console.log(`[DEBUG] Location found in organization.city: ${value}`);
                   } else {
-                    console.log(`[DEBUG] No location found for organization ${organizationData.name} (ID: ${organizationData.id})`);
+                    console.log(`[DEBUG] No location found for ${organizationData.name}. Available org properties:`, Object.keys(fullOrganization));
+                    
+                    // As a last resort, check if there are any field values with location data
+                    if (fullOrganization.field_values && Array.isArray(fullOrganization.field_values)) {
+                      const locationField = fullOrganization.field_values.find(fv => 
+                        fv.field && (
+                          fv.field.name?.toLowerCase().includes('location') ||
+                          fv.field.name?.toLowerCase().includes('address') ||
+                          fv.field.name?.toLowerCase().includes('city') ||
+                          fv.field.name?.toLowerCase().includes('headquarters')
+                        )
+                      );
+                      if (locationField && locationField.value) {
+                        value = locationField.value;
+                        console.log(`[DEBUG] Location found in field_values: ${value} (field: ${locationField.field.name})`);
+                      }
+                    }
                   }
                 } catch (error) {
                   console.warn(`[DEBUG] Could not fetch organization ${organizationData.id} for location:`, error.message);

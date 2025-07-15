@@ -687,12 +687,21 @@ export class AffinityService {
     return response.data.data || response.data;
   }
 
-  // Legacy v1 method - deprecated, use getListEntryFieldValues instead
+  // Use API v1 for field values as it provides better organization field coverage
   async getFieldValues(entityId: number, entityType: 'person' | 'organization' | 'opportunity'): Promise<AffinityFieldValue[]> {
-    console.warn('getFieldValues is deprecated for v2 API. Use getListEntryFieldValues instead.');
-    // For v2 API, this method cannot work the same way since field values are accessed through list entries
-    // Return empty array to prevent crashes
-    return [];
+    try {
+      const response = await this.client.get(`/field-values?${entityType}_id=${entityId}`, {
+        auth: {
+          username: '',
+          password: process.env.AFFINITY_API_KEY || ''
+        },
+        baseURL: 'https://api.affinity.co'
+      });
+      return response.data || [];
+    } catch (error) {
+      console.warn(`Could not fetch field values for ${entityType} ${entityId}:`, error.message);
+      return [];
+    }
   }
 
   async getPerson(personId: number): Promise<AffinityPerson> {
