@@ -260,14 +260,11 @@ export class SyncService {
 
           // Organization ID extraction confirmed working correctly
           
-          // NEW CACHING APPROACH: Use cached field data instead of individual API calls
-          console.log(`[OPTIMIZATION] Using cached field data for opportunity ${entry.entity.id}`);
+          // TEMPORARILY REVERT: Use direct API calls to restore data
+          console.log(`[DATA RECOVERY] Using direct API calls for opportunity ${entry.entity.id} to restore missing data`);
           
-          // Get field values from cache (this will fetch and cache if not present)
-          const fieldValues = await affinityService.getFieldValuesFromCache(
-            entry.entity.id,
-            syncPair.fieldMappings as FieldMapping[]
-          );
+          // Get field values directly from API (bypassing cache to restore data)
+          const fieldValues = await affinityService.getListEntryFieldValues(syncPair.affinityListId, entry.id);
 
           // Convert field values to Notion properties (includes Affinity ID automatically)
           const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
@@ -287,12 +284,16 @@ export class SyncService {
             // Check for conflicts (only if values have changed)
             const conflicts = await this.detectConflicts(syncPair, entry, existingNotionPage, fieldValues);
             if (conflicts.length > 0) {
-              return { type: 'conflict', count: conflicts.length };
+              // Conflicts detected but may have been auto-resolved - count them but continue sync
+              conflictsFound += conflicts.length;
+              console.log(`[CONFLICT HANDLING] Found ${conflicts.length} conflicts for entry ${affinityId}, but continuing sync (auto-resolution enabled)`);
             }
 
             // Update existing page
             console.log(`[AFFINITY->NOTION] Updating existing Notion page for entry ${affinityId} with properties: ${JSON.stringify(notionProperties)}`);
+            console.log(`[SYNC DEBUG] About to call notionService.updatePage for page ${existingNotionPage.id}`);
             await notionService.updatePage(existingNotionPage.id, notionProperties);
+            console.log(`[SYNC DEBUG] Successfully completed notionService.updatePage for page ${existingNotionPage.id}`);
             
             // Update or create synced record
             await storage.createOrUpdateSyncedRecord({
@@ -343,37 +344,27 @@ export class SyncService {
         }
       }
 
-      // Clean up Notion pages based on current filtering criteria
-      console.log('Starting cleanup process...');
+      // TEMPORARILY DISABLED: Clean up Notion pages based on current filtering criteria
+      console.log('CLEANUP TEMPORARILY DISABLED - Skipping page deletion to prevent data loss');
       
       // Create set of current filtered Affinity entity IDs (entries that should exist in Notion)
       const currentFilteredIds = new Set(affinityEntries.map(entry => entry.entity.id.toString()));
       console.log(`Current sync includes ${currentFilteredIds.size} filtered entries`);
       
-      // Find Notion pages that should be deleted
+      // Find Notion pages that would be deleted (but don't delete them)
       const pagesToDelete = [];
       
       for (const [affinityId, notionPage] of notionPageMap) {
-        // Delete if the Affinity ID is not in the current filtered set
+        // Check if it would be deleted (but don't actually delete)
         if (!currentFilteredIds.has(affinityId)) {
           pagesToDelete.push({ affinityId, notionPage, reason: 'no longer matches current filters' });
         }
       }
       
-      console.log(`Found ${pagesToDelete.length} Notion pages to delete (no longer match current sync criteria)`);
+      console.log(`Would delete ${pagesToDelete.length} Notion pages (CLEANUP DISABLED for safety)`);
       
-      // Delete the pages that no longer match current criteria
-      for (const { affinityId, notionPage, reason } of pagesToDelete) {
-        try {
-          console.log(`Deleting Notion page for Affinity ID ${affinityId}: ${notionPage.id} (${reason})`);
-          await notionService.deletePage(notionPage.id);
-          // Also delete the corresponding synced record
-          await storage.deleteSyncedRecord(syncPair.id, affinityId);
-          recordsDeleted++;
-        } catch (error) {
-          console.error(`Failed to delete Notion page ${notionPage.id} for Affinity ID ${affinityId}:`, error);
-        }
-      }
+      // SKIP ACTUAL DELETION to prevent data loss
+      console.log('SAFETY: Skipping page deletion - cleanup logic disabled');
       
       details.cleanup = {
         currentFilteredEntries: currentFilteredIds.size,

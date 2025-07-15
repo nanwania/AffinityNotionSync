@@ -161,21 +161,35 @@ export class NotionService {
   }
 
   async createPage(databaseId: string, properties: Record<string, any>): Promise<NotionPage> {
-    const response = await notion.pages.create({
-      parent: {
-        database_id: databaseId,
-      },
-      properties,
-    });
-    return response as NotionPage;
+    console.log(`[NOTION DEBUG] Creating page in database ${databaseId} with properties:`, JSON.stringify(properties, null, 2));
+    try {
+      const response = await notion.pages.create({
+        parent: {
+          database_id: databaseId,
+        },
+        properties,
+      });
+      console.log(`[NOTION SUCCESS] Page created successfully: ${response.id}`);
+      return response as NotionPage;
+    } catch (error) {
+      console.error(`[NOTION ERROR] Failed to create page in database ${databaseId}:`, error);
+      throw error;
+    }
   }
 
   async updatePage(pageId: string, properties: Record<string, any>): Promise<NotionPage> {
-    const response = await notion.pages.update({
-      page_id: pageId,
-      properties,
-    });
-    return response as NotionPage;
+    console.log(`[NOTION DEBUG] Updating page ${pageId} with properties:`, JSON.stringify(properties, null, 2));
+    try {
+      const response = await notion.pages.update({
+        page_id: pageId,
+        properties,
+      });
+      console.log(`[NOTION SUCCESS] Page ${pageId} updated successfully`);
+      return response as NotionPage;
+    } catch (error) {
+      console.error(`[NOTION ERROR] Failed to update page ${pageId}:`, error);
+      throw error;
+    }
   }
 
   async deletePage(pageId: string): Promise<NotionPage> {
