@@ -17,9 +17,13 @@ async function checkNotionPages() {
       console.log(`  Name: ${page.properties.Name?.title?.[0]?.text?.content || 'N/A'}`);
       console.log(`  Organization: ${page.properties.Organization?.rich_text?.[0]?.text?.content || 'N/A'}`);
       console.log(`  Location: ${page.properties.Location?.rich_text?.[0]?.text?.content || 'EMPTY'}`);
+      console.log(`  Expected Ahren Investment: ${page.properties['Expected Ahren Investment']?.number || 'N/A'}`);
+      console.log(`  Upcoming Round: ${page.properties['Upcoming Round']?.multi_select?.map(item => item.name).join(', ') || 'N/A'}`);
+      console.log(`  Organization_ID: ${page.properties.Organization_ID?.number || 'N/A'}`);
+      console.log(`  Last Modified: ${page.last_edited_time}`);
       
-      // Debug: show full Location property structure
-      if (page.properties.Location) {
+      // Debug: show full properties if needed
+      if (page.properties.Location?.rich_text?.length === 0) {
         console.log(`  Location (full): ${JSON.stringify(page.properties.Location)}`);
       }
     });

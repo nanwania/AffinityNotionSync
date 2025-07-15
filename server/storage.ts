@@ -4,6 +4,7 @@ import {
   syncHistory, 
   conflicts,
   syncedRecords,
+  affinityFieldData,
   type User, 
   type InsertUser, 
   type SyncPair, 
@@ -13,7 +14,9 @@ import {
   type Conflict,
   type InsertConflict,
   type SyncedRecord,
-  type InsertSyncedRecord
+  type InsertSyncedRecord,
+  type AffinityFieldData,
+  type InsertAffinityFieldData
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -46,6 +49,11 @@ export interface IStorage {
   getSyncedRecord(syncPairId: number, recordId: string): Promise<SyncedRecord | undefined>;
   createOrUpdateSyncedRecord(syncedRecord: InsertSyncedRecord): Promise<SyncedRecord>;
   deleteSyncedRecord(syncPairId: number, recordId: string): Promise<void>;
+  
+  // Affinity Field Data Cache
+  getAffinityFieldData(affinityId: string): Promise<AffinityFieldData | undefined>;
+  createOrUpdateAffinityFieldData(fieldData: InsertAffinityFieldData): Promise<AffinityFieldData>;
+  deleteAffinityFieldData(affinityId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -190,6 +198,39 @@ export class DatabaseStorage implements IStorage {
   async deleteSyncedRecord(syncPairId: number, recordId: string): Promise<void> {
     await db.delete(syncedRecords)
       .where(and(eq(syncedRecords.syncPairId, syncPairId), eq(syncedRecords.recordId, recordId)));
+  }
+
+  async getAffinityFieldData(affinityId: string): Promise<AffinityFieldData | undefined> {
+    const [fieldData] = await db
+      .select()
+      .from(affinityFieldData)
+      .where(eq(affinityFieldData.affinityId, affinityId));
+    return fieldData || undefined;
+  }
+
+  async createOrUpdateAffinityFieldData(fieldData: InsertAffinityFieldData): Promise<AffinityFieldData> {
+    const [result] = await db
+      .insert(affinityFieldData)
+      .values(fieldData)
+      .onConflictDoUpdate({
+        target: affinityFieldData.affinityId,
+        set: {
+          fieldData: fieldData.fieldData,
+          organizationData: fieldData.organizationData,
+          personData: fieldData.personData,
+          lastFetchedAt: new Date(),
+          affinityLastModified: fieldData.affinityLastModified,
+          updatedAt: new Date()
+        }
+      })
+      .returning();
+    return result;
+  }
+
+  async deleteAffinityFieldData(affinityId: string): Promise<void> {
+    await db
+      .delete(affinityFieldData)
+      .where(eq(affinityFieldData.affinityId, affinityId));
   }
 }
 

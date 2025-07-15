@@ -260,14 +260,14 @@ export class SyncService {
 
           // Organization ID extraction confirmed working correctly
           
-          // For v2 API, field values are embedded in entry.entity.fields - convert to legacy format for compatibility
-          const entityFields = entry.entity?.fields || [];
-
-          const fieldValues = entityFields.map(field => ({
-            field_id: field.id, // Keep original field ID for proper matching
-            value: field.value?.data,
-            id: field.id
-          }));
+          // NEW CACHING APPROACH: Use cached field data instead of individual API calls
+          console.log(`[OPTIMIZATION] Using cached field data for opportunity ${entry.entity.id}`);
+          
+          // Get field values from cache (this will fetch and cache if not present)
+          const fieldValues = await affinityService.getFieldValuesFromCache(
+            entry.entity.id,
+            syncPair.fieldMappings as FieldMapping[]
+          );
 
           // Convert field values to Notion properties (includes Affinity ID automatically)
           const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
