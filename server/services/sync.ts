@@ -330,6 +330,9 @@ export class SyncService {
 
           // Convert field values to Notion properties (includes Affinity ID automatically)
           const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
+          
+          // Generate company logo URL if domain is available
+          const logoUrl = this.generateCompanyLogoUrl(entry);
 
           if (existingNotionPage) {
             // Check if we have a synced record for this entry
@@ -348,8 +351,8 @@ export class SyncService {
               return { type: 'conflict', count: conflicts.length };
             }
 
-            // Update existing page
-            await notionService.updatePage(existingNotionPage.id, notionProperties);
+            // Update existing page with logo
+            await notionService.updatePage(existingNotionPage.id, notionProperties, logoUrl);
             
             // Update or create synced record
             await storage.createOrUpdateSyncedRecord({
@@ -366,8 +369,8 @@ export class SyncService {
             
             return { type: 'updated', count: 1 };
           } else {
-            // Create new page
-            const newPage = await notionService.createPage(syncPair.notionDatabaseId, notionProperties);
+            // Create new page with logo
+            const newPage = await notionService.createPage(syncPair.notionDatabaseId, notionProperties, logoUrl);
             const currentFieldHash = this.normalizeAndHashFieldValues(fieldValues, syncPair.fieldMappings as FieldMapping[]);
             
             // Create synced record for the new page
@@ -702,6 +705,27 @@ export class SyncService {
     }
 
     return conflicts;
+  }
+
+  private generateCompanyLogoUrl(affinityEntry: AffinityListEntry): string | undefined {
+    // Try to get domain from organization enrichment data first
+    if (affinityEntry.organizationDomain) {
+      console.log(`[LOGO] Using enriched domain: ${affinityEntry.organizationDomain}`);
+      return `https://images.affinity.co/companies/${affinityEntry.organizationDomain}`;
+    }
+    
+    // Fallback: Extract domain from companies field
+    const organizationField = affinityEntry?.entity?.fields?.find(f => f.id === 'companies');
+    if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+      const domain = organizationField.value.data[0].domain;
+      if (domain) {
+        console.log(`[LOGO] Using companies field domain: ${domain}`);
+        return `https://images.affinity.co/companies/${domain}`;
+      }
+    }
+    
+    console.log(`[LOGO] No domain found for entity ${affinityEntry.entity.id}`);
+    return undefined;
   }
 
   private extractAffinityIdFromNotionPage(page: NotionPage): string | null {

@@ -160,21 +160,45 @@ export class NotionService {
     return response as NotionPage;
   }
 
-  async createPage(databaseId: string, properties: Record<string, any>): Promise<NotionPage> {
-    const response = await notion.pages.create({
+  async createPage(databaseId: string, properties: Record<string, any>, icon?: string): Promise<NotionPage> {
+    const pageData: any = {
       parent: {
         database_id: databaseId,
       },
       properties,
-    });
+    };
+
+    // Add icon if provided
+    if (icon) {
+      pageData.icon = {
+        type: 'external',
+        external: {
+          url: icon
+        }
+      };
+    }
+
+    const response = await notion.pages.create(pageData);
     return response as NotionPage;
   }
 
-  async updatePage(pageId: string, properties: Record<string, any>): Promise<NotionPage> {
-    const response = await notion.pages.update({
+  async updatePage(pageId: string, properties: Record<string, any>, icon?: string): Promise<NotionPage> {
+    const pageData: any = {
       page_id: pageId,
       properties,
-    });
+    };
+
+    // Add icon if provided
+    if (icon) {
+      pageData.icon = {
+        type: 'external',
+        external: {
+          url: icon
+        }
+      };
+    }
+
+    const response = await notion.pages.update(pageData);
     return response as NotionPage;
   }
 
