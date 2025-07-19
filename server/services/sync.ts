@@ -215,28 +215,34 @@ export class SyncService {
       console.log(`Step 1-2: Found ${affinityEntries.length} opportunities matching status filters`);
       
       // Step 3 & 4: For each opportunity, get opportunity details (with organization_id) and organization fields
+      console.log(`[DEBUG] Starting enrichment for ${affinityEntries.length} entries`);
       const enrichedEntries = [];
       for (const entry of affinityEntries) {
+        console.log(`[DEBUG] Processing entry ${entry.entity_id}, entity_type=${entry.entity_type}`);
         if (entry.entity_type === 2) { // Only process opportunities
           try {
+            console.log(`[DEBUG] Getting opportunity details for ${entry.entity_id}`);
             // Step 3: Get opportunity details including organization_id
             const opportunityDetails = await affinityService.getOpportunity(entry.entity_id);
             entry.organizationId = opportunityDetails.organization_id;
+            console.log(`[DEBUG] Got organization_id: ${opportunityDetails.organization_id}`);
             
             // Step 4: Get organization fields if we have an organization_id
             if (opportunityDetails.organization_id) {
+              console.log(`[DEBUG] Getting organization field values for org ${opportunityDetails.organization_id}`);
               const orgFieldValues = await affinityService.getOrganizationFieldValues(opportunityDetails.organization_id);
               entry.organizationFields = orgFieldValues;
               
               // Also get organization details for name and domain (for hyperlink)
+              console.log(`[DEBUG] Getting organization details for org ${opportunityDetails.organization_id}`);
               const orgDetails = await affinityService.getOrganization(opportunityDetails.organization_id);
               entry.organizationName = orgDetails.name;
               entry.organizationDomain = orgDetails.domain;
               
-              console.log(`[SIMPLE] Opportunity ${entry.entity_id}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}, org_name=${orgDetails.name}, org_domain=${orgDetails.domain}`);
+              console.log(`[ENRICHMENT] Opportunity ${entry.entity_id}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}, org_name=${orgDetails.name}, org_domain=${orgDetails.domain}`);
             }
           } catch (error) {
-            console.warn(`Could not enrich opportunity ${entry.entity_id}:`, error);
+            console.warn(`Could not enrich opportunity ${entry.entity_id}:`, error.message);
           }
         }
         enrichedEntries.push(entry);
@@ -262,6 +268,10 @@ export class SyncService {
           pagesWithAffinityId++;
         } else {
           pagesWithoutAffinityId++;
+          // Debug: Log property names for first few pages to understand structure
+          if (pagesWithoutAffinityId <= 2) {
+            console.log(`[DEBUG] Page without Affinity ID - properties: ${Object.keys(page.properties).join(', ')}`);
+          }
         }
       });
       
@@ -290,6 +300,33 @@ export class SyncService {
             value: field.value?.data,
             id: field.id
           }));
+
+          // ALWAYS perform organization enrichment for each entry during sync
+          const entityId = entry.entity?.id || entry.entity_id;
+          const entityType = entry.entity_type || (entry.entity?.type);
+          
+          if (entityType === 2 && entityId) { // Only for opportunities
+            try {
+              console.log(`[DEBUG] Getting opportunity details for ${entityId}`);
+              const opportunityDetails = await affinityService.getOpportunity(entityId);
+              entry.organizationId = opportunityDetails.organization_id;
+              
+              if (opportunityDetails.organization_id) {
+                console.log(`[DEBUG] Getting organization field values for org ${opportunityDetails.organization_id}`);
+                const orgFieldValues = await affinityService.getOrganizationFieldValues(opportunityDetails.organization_id);
+                entry.organizationFields = orgFieldValues;
+                
+                console.log(`[DEBUG] Getting organization details for org ${opportunityDetails.organization_id}`);
+                const orgDetails = await affinityService.getOrganization(opportunityDetails.organization_id);
+                entry.organizationName = orgDetails.name;
+                entry.organizationDomain = orgDetails.domain;
+                
+                console.log(`[ENRICHMENT] Opportunity ${entityId}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}, org_name=${orgDetails.name}, org_domain=${orgDetails.domain}`);
+              }
+            } catch (error) {
+              console.warn(`Could not enrich opportunity ${entityId}:`, error.message);
+            }
+          }
 
           // Convert field values to Notion properties (includes Affinity ID automatically)
           const notionProperties = await this.convertAffinityToNotionProperties(fieldValues, syncPair.fieldMappings as FieldMapping[], syncPair.notionDatabaseId, entry);
@@ -669,8 +706,12 @@ export class SyncService {
 
   private extractAffinityIdFromNotionPage(page: NotionPage): string | null {
     const affinityIdProperty = page.properties['Affinity_ID'];
-    if (affinityIdProperty && affinityIdProperty.type === 'rich_text') {
-      return affinityIdProperty.rich_text?.[0]?.text?.content || null;
+    if (affinityIdProperty) {
+      if (affinityIdProperty.type === 'rich_text') {
+        return affinityIdProperty.rich_text?.[0]?.text?.content || null;
+      } else if (affinityIdProperty.type === 'number') {
+        return affinityIdProperty.number?.toString() || null;
+      }
     }
     return null;
   }
