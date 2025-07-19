@@ -791,10 +791,31 @@ export class SyncService {
       } else if (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) {
         // This is a numeric organization field ID - look in organizationFields
         const numericFieldId = parseInt(mapping.affinityFieldId);
-        const orgFieldValue = affinityEntry?.organizationFields?.find(fv => fv.field_id === numericFieldId);
-        if (orgFieldValue) {
-          value = orgFieldValue.value;
-          console.log(`[SIMPLE] Organization field ${mapping.affinityField}: ${JSON.stringify(value)}`);
+        
+        // Get organization ID from the companies field for organization field lookup
+        let orgId = null;
+        const organizationField = affinityEntry?.entity?.fields?.find(f => f.id === 'companies');
+        if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+          orgId = organizationField.value.data[0].id;
+        }
+        
+        // If we have an organization ID, fetch the organization fields directly
+        if (orgId) {
+          try {
+            console.log(`[DEBUG] Fetching organization field ${numericFieldId} for org ${orgId}`);
+            const orgFieldValues = await affinityService.getOrganizationFieldValues(orgId);
+            const orgFieldValue = orgFieldValues.find(fv => fv.field_id === numericFieldId);
+            if (orgFieldValue) {
+              value = orgFieldValue.value;
+              console.log(`[SIMPLE] Organization field ${mapping.affinityField} (ID: ${numericFieldId}): ${JSON.stringify(value)}`);
+            } else {
+              console.log(`[DEBUG] Organization field ${mapping.affinityField} (ID: ${numericFieldId}) not found in ${orgFieldValues.length} fields`);
+            }
+          } catch (error) {
+            console.warn(`Error fetching organization field ${numericFieldId} for org ${orgId}:`, error.message);
+          }
+        } else {
+          console.log(`[DEBUG] No organization ID found for organization field ${mapping.affinityField}`);
         }
       } else if (mapping.affinityFieldId && mapping.affinityFieldId < 0 && affinityEntry) {
         // Handle virtual fields (negative IDs)
