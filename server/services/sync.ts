@@ -724,18 +724,45 @@ export class SyncService {
 
         // Regular field processing
         else {
+          // Debug logging for Description field
+          if (mapping.affinityField === 'Description') {
+            console.log(`[DEBUG] Processing Description field - looking for field ID: ${mapping.affinityFieldId}`);
+            console.log(`[DEBUG] Available opportunity field IDs: ${fieldValues.map(fv => fv.field_id).join(', ')}`);
+            
+            // Also check embedded fields
+            if (affinityEntry.entity?.fields) {
+              console.log(`[DEBUG] Available embedded field IDs: ${affinityEntry.entity.fields.map(f => f.id).join(', ')}`);
+              
+              // Look for any field that might contain description text
+              const textFields = affinityEntry.entity.fields.filter(f => 
+                f.value?.data && 
+                typeof f.value.data === 'string' && 
+                f.value.data.length > 50 && 
+                !f.value.data.includes('@') && 
+                !f.value.data.includes('http')
+              );
+              
+              if (textFields.length > 0) {
+                console.log(`[DEBUG] Found ${textFields.length} potential description fields:`);
+                textFields.forEach(tf => {
+                  console.log(`[DEBUG]   Field ${tf.id}: ${tf.value.data.substring(0, 100)}...`);
+                });
+              }
+            }
+          }
+          
           // First, try to find the field value in opportunity fields
           const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
           if (fieldValue) {
             value = fieldValue.value;
           } else {
-          // If not found in opportunity, check if this is an organization field like Location
-          if (mapping.affinityField === 'Location' && mapping.affinityFieldId) {
+          // If not found in opportunity, check if this is an organization field like Location or Description
+          if ((mapping.affinityField === 'Location' || mapping.affinityField === 'Description') && mapping.affinityFieldId) {
             // For Location field, fetch it from the linked organization using API
             const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies');
             if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
               const organizationId = organizationField.value.data[0].id;
-              console.log(`[DEBUG] Location is organization field - fetching from organization ${organizationId} using field ID ${mapping.affinityFieldId}`);
+              console.log(`[DEBUG] ${mapping.affinityField} is organization field - fetching from organization ${organizationId} using field ID ${mapping.affinityFieldId}`);
               
               try {
                 // Fetch organization field values from Affinity
@@ -753,9 +780,9 @@ export class SyncService {
                 const locationFieldValue = orgFieldValues.find(fv => fv.field_id === numericFieldId);
                 if (locationFieldValue) {
                   value = locationFieldValue.value;
-                  console.log(`[DEBUG] Location found: ${JSON.stringify(value)}`);
+                  console.log(`[DEBUG] ${mapping.affinityField} found: ${JSON.stringify(value)}`);
                 } else {
-                  console.log(`[DEBUG] Location field ${numericFieldId} not found in organization field values`);
+                  console.log(`[DEBUG] ${mapping.affinityField} field ${numericFieldId} not found in organization field values`);
                 }
               } catch (error) {
                 console.error(`[DEBUG] Error fetching organization field values for org ${organizationId}: ${error.message}`);
