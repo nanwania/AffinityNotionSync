@@ -94,26 +94,23 @@ export class AffinityService {
   }
 
   async getListEntries(listId: number, cursor?: string): Promise<{ entries: AffinityListEntry[], nextUrl?: string }> {
-    const params: any = {};
+    // Get list fields first to include them in the request
+    const listFields = await this.getFields(listId);
+    const fieldIds = listFields.map(f => f.id);
     
+    const params: any = { 
+      fieldIds: fieldIds.join(',') // Include all list fields
+    };
     if (cursor) {
       params.cursor = cursor;
     }
 
-    try {
-      const response = await this.client.get(`/v2/lists/${listId}/list-entries`, { params });
-      
-      return {
-        entries: response.data.data || [],
-        nextUrl: response.data.pagination?.nextUrl
-      };
-    } catch (error) {
-      console.error(`Error fetching list entries for list ${listId}:`, error.message);
-      return {
-        entries: [],
-        nextUrl: undefined
-      };
-    }
+    const response = await this.client.get(`/v2/lists/${listId}/list-entries`, { params });
+    
+    return {
+      entries: response.data.data || [],
+      nextUrl: response.data.pagination?.nextUrl
+    };
   }
 
   async getAllListEntries(listId: number, statusFilters?: string[]): Promise<AffinityListEntry[]> {
@@ -127,14 +124,10 @@ export class AffinityService {
     
     if (shouldFilter) {
       const fields = await this.getFields(listId);
-      if (Array.isArray(fields)) {
-        const statusField = fields.find(f => f.name?.toLowerCase() === 'status');
-        // The fields API already returns IDs with 'field-' prefix for most fields
-        statusFieldId = statusField ? statusField.id : undefined;
-        console.log(`Optimized filtering enabled for status field: ${statusField?.name} (looking for field ID: ${statusFieldId})`);
-      } else {
-        console.log('Could not fetch fields for filtering');
-      }
+      const statusField = fields.find(f => f.name.toLowerCase() === 'status');
+      // The fields API already returns IDs with 'field-' prefix for most fields
+      statusFieldId = statusField ? statusField.id : undefined;
+      console.log(`Optimized filtering enabled for status field: ${statusField?.name} (looking for field ID: ${statusFieldId})`);
     }
 
     console.log(`Fetching entries for list ${listId}${shouldFilter ? ` with status filters: [${statusFilters.join(', ')}]` : ''}`);
@@ -223,19 +216,12 @@ export class AffinityService {
   }
 
   async getFields(listId?: number): Promise<AffinityField[]> {
-    try {
-      if (listId) {
-        const response = await this.client.get(`/v2/lists/${listId}/fields`);
-        const fields = response.data.data || response.data || [];
-        return Array.isArray(fields) ? fields : [];
-      } else {
-        const response = await this.client.get('/v2/fields');
-        const fields = response.data.data || response.data || [];
-        return Array.isArray(fields) ? fields : [];
-      }
-    } catch (error) {
-      console.error(`Error fetching fields for list ${listId}:`, error.message);
-      return [];
+    if (listId) {
+      const response = await this.client.get(`/v2/lists/${listId}/fields`);
+      return response.data.data || response.data;
+    } else {
+      const response = await this.client.get('/v2/fields');
+      return response.data.data || response.data;
     }
   }
 
@@ -701,21 +687,12 @@ export class AffinityService {
     return response.data.data || response.data;
   }
 
-  // Use API v1 for field values as it provides better organization field coverage
+  // Legacy v1 method - deprecated, use getListEntryFieldValues instead
   async getFieldValues(entityId: number, entityType: 'person' | 'organization' | 'opportunity'): Promise<AffinityFieldValue[]> {
-    try {
-      const response = await this.client.get(`/field-values?${entityType}_id=${entityId}`, {
-        auth: {
-          username: '',
-          password: process.env.AFFINITY_API_KEY || ''
-        },
-        baseURL: 'https://api.affinity.co'
-      });
-      return response.data || [];
-    } catch (error) {
-      console.warn(`Could not fetch field values for ${entityType} ${entityId}:`, error.message);
-      return [];
-    }
+    console.warn('getFieldValues is deprecated for v2 API. Use getListEntryFieldValues instead.');
+    // For v2 API, this method cannot work the same way since field values are accessed through list entries
+    // Return empty array to prevent crashes
+    return [];
   }
 
   async getPerson(personId: number): Promise<AffinityPerson> {

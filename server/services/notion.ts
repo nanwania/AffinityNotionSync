@@ -253,9 +253,8 @@ export class NotionService {
           else if (affinityValue.name) {
             textValue = affinityValue.name;
           }
-          // If it has an address-like structure (handle location objects from Affinity)
-          else if (affinityValue.street_address !== undefined || affinityValue.city || affinityValue.state || affinityValue.country) {
-            console.log(`[DEBUG] Converting location object to text: ${JSON.stringify(affinityValue)}`);
+          // If it has an address-like structure
+          else if (affinityValue.street_address || affinityValue.city || affinityValue.state) {
             const parts = [
               affinityValue.street_address,
               affinityValue.city,
@@ -264,7 +263,6 @@ export class NotionService {
               affinityValue.country
             ].filter(Boolean);
             textValue = parts.join(', ');
-            console.log(`[DEBUG] Location converted to: ${textValue}`);
           }
           // Otherwise try to JSON stringify it as a fallback
           else {
