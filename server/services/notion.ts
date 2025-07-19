@@ -366,6 +366,17 @@ export class NotionService {
         return {
           select: selectValue ? { name: String(selectValue) } : null
         };
+      case 'status':
+        let statusValue = affinityValue;
+        // Handle Affinity dropdown format: { dropdownOptionId: X, text: "Option Text" }
+        if (typeof affinityValue === 'object' && affinityValue.text) {
+          statusValue = affinityValue.text;
+        } else if (Array.isArray(affinityValue) && affinityValue.length > 0 && affinityValue[0].text) {
+          statusValue = affinityValue[0].text; // Take first option for single select
+        }
+        return {
+          status: statusValue ? { name: String(statusValue) } : null
+        };
       case 'multi_select':
         let values = Array.isArray(affinityValue) ? affinityValue : [affinityValue];
         // Handle Affinity dropdown format: [{ dropdownOptionId: X, text: "Option Text" }]

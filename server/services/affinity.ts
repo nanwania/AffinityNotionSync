@@ -736,6 +736,22 @@ export class AffinityService {
     }
   }
 
+  async getOrganizationFields(): Promise<AffinityField[]> {
+    try {
+      const response = await this.client.get('/organizations/fields', {
+        auth: {
+          username: '',
+          password: process.env.AFFINITY_API_KEY || ''
+        },
+        baseURL: 'https://api.affinity.co'
+      });
+      return response.data || [];
+    } catch (error: any) {
+      console.error('Error fetching organization fields:', error.message);
+      return [];
+    }
+  }
+
   async getPerson(personId: number): Promise<AffinityPerson> {
     const response = await this.client.get(`/v2/persons/${personId}`);
     return response.data;

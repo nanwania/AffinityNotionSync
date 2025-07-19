@@ -812,9 +812,47 @@ export class SyncService {
             console.log(`[SIMPLE] Organization Name (from companies field): ${value} (domain: ${affinityEntry.organizationDomain})`);
           }
         }
-      } else if (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) {
-        // This is a numeric organization field ID - look in organizationFields
-        const numericFieldId = parseInt(mapping.affinityFieldId);
+      } else if (
+        (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) ||
+        (mapping.affinityField && (mapping.affinityField.includes('Cash') || mapping.affinityField.includes('Money') || mapping.affinityField.includes('Location') || mapping.affinityField.includes('Description')))
+      ) {
+        // This is a numeric organization field ID or a known organization field - look in organizationFields
+        let numericFieldId = null;
+        
+        if (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) {
+          numericFieldId = parseInt(mapping.affinityFieldId);
+        } else {
+          // Get organization field ID by fetching organization fields from API
+          try {
+            const orgFields = await affinityService.getOrganizationFields();
+            const matchingField = orgFields.find(field => field.name === mapping.affinityField);
+            numericFieldId = matchingField ? matchingField.id : null;
+            console.log(`[DEBUG] Mapping organization field "${mapping.affinityField}" to ID ${numericFieldId} (from API)`);
+            
+            // Fallback to hardcoded IDs for known fields if API fails
+            if (!numericFieldId) {
+              const commonOrgFields = {
+                'Last Known Cash Position': 5174383,
+                'Post-Money Last Round': 5174384,
+                'Description': 5174377,
+                'Location': 5174382
+              };
+              numericFieldId = commonOrgFields[mapping.affinityField] || null;
+              console.log(`[DEBUG] Using fallback ID ${numericFieldId} for organization field "${mapping.affinityField}"`);
+            }
+          } catch (error) {
+            console.warn(`Error fetching organization fields from API:`, error.message);
+            // Use fallback IDs
+            const commonOrgFields = {
+              'Last Known Cash Position': 5174383,
+              'Post-Money Last Round': 5174384,
+              'Description': 5174377,
+              'Location': 5174382
+            };
+            numericFieldId = commonOrgFields[mapping.affinityField] || null;
+            console.log(`[DEBUG] Using fallback ID ${numericFieldId} for organization field "${mapping.affinityField}"`);
+          }
+        }
         
         // Get organization ID from the companies field for organization field lookup
         let orgId = null;
@@ -823,8 +861,8 @@ export class SyncService {
           orgId = organizationField.value.data[0].id;
         }
         
-        // If we have an organization ID, fetch the organization fields directly
-        if (orgId) {
+        // If we have an organization ID and field ID, fetch the organization fields directly
+        if (orgId && numericFieldId) {
           try {
             console.log(`[DEBUG] Fetching organization field ${numericFieldId} for org ${orgId}`);
             const orgFieldValues = await affinityService.getOrganizationFieldValues(orgId);
