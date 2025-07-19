@@ -104,6 +104,7 @@ The application is designed to be deployed on Replit with automatic database pro
 - **✅ Organization ID Extraction:** Returns proper numeric organization IDs (281869294, 299939085, etc.) from companies field
 - **✅ Organization Name Hyperlinks:** Company names display as clickable text linking to domains (e.g., "Loora" → https://loora.ai)
 - **✅ Organization Fields Syncing:** Description (ID: 5174377) and Location (ID: 5174382) organization fields now sync properly
+- **✅ Company Logo Icons:** Notion page icons now display company logos using Affinity format `https://images.affinity.co/companies/[domain]`
 - **Enhanced Sync Logic:** Added direct organization field fetching during sync to ensure Description/Location data pulls from organization API
 - **Simplified 5-Step Process:** Successfully implemented user-requested approach: pull deals → filter by status → extract organization ID → fetch organization fields → sync selected fields only
 - **Safety Maintained:** Absolute protection against Affinity entry deletion confirmed working (0 deleted entries in all syncs)
