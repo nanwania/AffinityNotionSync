@@ -223,6 +223,22 @@ export class SyncService {
         };
       }
       
+      // TEMPORARY TEST MODE: Limit to entries that have organizations linked for testing
+      const originalCount = affinityEntries.length;
+      affinityEntries = affinityEntries.filter(entry => {
+        const companiesField = entry.entity?.fields?.find(f => f.id === 'companies');
+        const hasOrganization = companiesField && companiesField.value?.data && 
+          Array.isArray(companiesField.value.data) && companiesField.value.data.length > 0;
+        return hasOrganization;
+      });
+      console.log(`[TEST MODE] Filtered from ${originalCount} to ${affinityEntries.length} entries with organizations linked`);
+      
+      // Limit to first 5 entries for focused testing
+      if (affinityEntries.length > 5) {
+        affinityEntries = affinityEntries.slice(0, 5);
+        console.log(`[TEST MODE] Limited to first 5 entries for testing: ${affinityEntries.map(e => e.entity.id).join(', ')}`);
+      }
+      
       // Get Notion database pages
       const notionPages = await notionService.queryDatabase(syncPair.notionDatabaseId);
       console.log(`Found ${notionPages.length} total pages in Notion database`);
