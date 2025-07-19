@@ -182,12 +182,33 @@ export class AffinityService {
     return allEntries;
   }
 
+  async getOpportunity(opportunityId: number): Promise<any> {
+    try {
+      const response = await this.client.get(`/opportunities/${opportunityId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching opportunity ${opportunityId}:`, error);
+      throw error;
+    }
+  }
+
   async getEnrichedListEntries(listId: number): Promise<any[]> {
     const entries = await this.getAllListEntries(listId);
     const enrichedEntries = [];
 
     for (const entry of entries) {
       let enrichedEntry = { ...entry };
+      
+      // If entity is an opportunity (type 2), fetch full opportunity details including organization_id
+      if (entry.entity_type === 2) {
+        try {
+          const opportunityDetails = await this.getOpportunity(entry.entity_id);
+          enrichedEntry.opportunity = opportunityDetails;
+          console.log(`[DEBUG] Opportunity ${entry.entity_id} organization_id: ${opportunityDetails.organization_id}`);
+        } catch (error) {
+          console.warn(`Could not fetch opportunity details for ${entry.entity_id}:`, error);
+        }
+      }
       
       // If entity is an organization (type 1), fetch additional org details
       if (entry.entity_type === 1) {
@@ -693,6 +714,26 @@ export class AffinityService {
     // For v2 API, this method cannot work the same way since field values are accessed through list entries
     // Return empty array to prevent crashes
     return [];
+  }
+
+  async getOrganizationFieldValues(organizationId: number): Promise<AffinityFieldValue[]> {
+    try {
+      // Use API v1 to fetch organization field values since v2 doesn't support this directly yet
+      const response = await this.client.get(`/field-values?organization_id=${organizationId}`, {
+        auth: {
+          username: '',
+          password: process.env.AFFINITY_API_KEY || ''
+        },
+        baseURL: 'https://api.affinity.co'
+      });
+      
+      const fieldValues = response.data || [];
+      console.log(`[DEBUG] Fetched ${fieldValues.length} field values for organization ${organizationId}`);
+      return fieldValues;
+    } catch (error) {
+      console.error(`Error fetching organization field values for ${organizationId}:`, error);
+      return [];
+    }
   }
 
   async getPerson(personId: number): Promise<AffinityPerson> {

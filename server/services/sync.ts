@@ -204,7 +204,7 @@ export class SyncService {
     const details: any = {};
 
     try {
-      // Get Affinity list entries with optional pre-filtering for performance
+      // Step 1 & 2: Pull list of deals and filter by status requirement
       let affinityEntries = await affinityService.getAllListEntries(
         parseInt(syncPair.affinityListId),
         syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0 
@@ -212,14 +212,32 @@ export class SyncService {
           : undefined
       );
       
-      // Status filtering is now handled in getAllListEntries for performance
-      if (syncPair.statusFilters && Array.isArray(syncPair.statusFilters) && syncPair.statusFilters.length > 0) {
-        console.log(`Pre-filtered to ${affinityEntries.length} entries matching status filters: [${syncPair.statusFilters.join(', ')}]`);
-        details.statusFiltering = {
-          filteredEntries: affinityEntries.length,
-          statusFilters: syncPair.statusFilters
-        };
+      console.log(`Step 1-2: Found ${affinityEntries.length} opportunities matching status filters`);
+      
+      // Step 3 & 4: For each opportunity, get opportunity details (with organization_id) and organization fields
+      const enrichedEntries = [];
+      for (const entry of affinityEntries) {
+        if (entry.entity_type === 2) { // Only process opportunities
+          try {
+            // Step 3: Get opportunity details including organization_id
+            const opportunityDetails = await affinityService.getOpportunity(entry.entity_id);
+            entry.organizationId = opportunityDetails.organization_id;
+            
+            // Step 4: Get organization fields if we have an organization_id
+            if (opportunityDetails.organization_id) {
+              const orgFieldValues = await affinityService.getOrganizationFieldValues(opportunityDetails.organization_id);
+              entry.organizationFields = orgFieldValues;
+              console.log(`[SIMPLE] Opportunity ${entry.entity_id}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}`);
+            }
+          } catch (error) {
+            console.warn(`Could not enrich opportunity ${entry.entity_id}:`, error);
+          }
+        }
+        enrichedEntries.push(entry);
       }
+      affinityEntries = enrichedEntries;
+      
+      console.log(`Step 3-4: Enriched ${affinityEntries.length} opportunities with organization data`);
       
       // Get Notion database pages
       const notionPages = await notionService.queryDatabase(syncPair.notionDatabaseId);
@@ -691,12 +709,25 @@ export class SyncService {
       }
     }
 
-    // Process user-defined field mappings
+    // Step 5: Only sync fields which have been selected
     for (const mapping of fieldMappings) {
       let value = null;
       
-      // Handle virtual fields (negative IDs)
-      if (mapping.affinityFieldId && mapping.affinityFieldId < 0 && affinityEntry) {
+      // Simple field value extraction based on field type
+      if (mapping.affinityField === 'Organization ID' && affinityEntry?.organizationId) {
+        // Use the organization_id we fetched from opportunity API
+        value = affinityEntry.organizationId;
+        console.log(`[SIMPLE] Organization ID: ${value}`);
+      } else if (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) {
+        // This is a numeric organization field ID - look in organizationFields
+        const numericFieldId = parseInt(mapping.affinityFieldId);
+        const orgFieldValue = affinityEntry?.organizationFields?.find(fv => fv.field_id === numericFieldId);
+        if (orgFieldValue) {
+          value = orgFieldValue.value;
+          console.log(`[SIMPLE] Organization field ${mapping.affinityField}: ${JSON.stringify(value)}`);
+        }
+      } else if (mapping.affinityFieldId && mapping.affinityFieldId < 0 && affinityEntry) {
+        // Handle virtual fields (negative IDs)
         switch (mapping.affinityFieldId) {
           case -1: // Entity Name
             value = affinityEntry.entity.name;
@@ -732,27 +763,21 @@ export class SyncService {
             break;
         }
       } else {
-        // Handle regular field values
+        // Regular opportunity field - look in embedded fields or fieldValues
         const fieldValue = fieldValues.find(fv => fv.field_id === mapping.affinityFieldId);
         if (fieldValue) {
           value = fieldValue.value;
-          
-          // Special handling for organization fields - extract from companies field if it's a virtual organization field
-          if (mapping.affinityField === 'Organizations' && affinityEntry) {
-            const organizationField = affinityEntry.entity?.fields?.find(f => f.id === 'companies' || f.name === 'Organizations');
-            if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data)) {
-              value = organizationField.value.data; // Full organization objects with name, id, domain
-            }
-          }
+          console.log(`[SIMPLE] Opportunity field ${mapping.affinityField}: ${JSON.stringify(value)}`);
         }
       }
       
-      const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
-      console.log(`[DEBUG] Processing field mapping: ${mapping.affinityField} -> ${mapping.notionProperty}, value: ${JSON.stringify(value)}, type: ${propertyType}`);
-      notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
-        value, 
-        propertyType
-      );
+      if (value !== null) {
+        const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
+        notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
+          value, 
+          propertyType
+        );
+      }
     }
 
     return notionProperties;
@@ -817,6 +842,31 @@ export class SyncService {
     } else {
       console.log(`[AFFINITY SAFETY] No field updates needed for this entry`);
     }
+  }
+
+  // Cache for organization field IDs to avoid repeated API calls
+  private organizationFieldIds: Set<number> | null = null;
+
+  private async getOrganizationFieldIds(): Promise<Set<number>> {
+    if (this.organizationFieldIds === null) {
+      try {
+        const orgFields = await affinityService.getOrganizationFields();
+        this.organizationFieldIds = new Set(orgFields.map(field => field.id).filter(id => id !== undefined));
+        console.log(`[DEBUG] Cached ${this.organizationFieldIds.size} organization field IDs: ${Array.from(this.organizationFieldIds).join(', ')}`);
+      } catch (error) {
+        console.error('Error fetching organization field IDs:', error);
+        this.organizationFieldIds = new Set();
+      }
+    }
+    return this.organizationFieldIds;
+  }
+
+  private async isOrganizationField(fieldId: string | number): Promise<boolean> {
+    const numericFieldId = parseInt(fieldId.toString());
+    const orgFieldIds = await this.getOrganizationFieldIds();
+    const isOrgField = orgFieldIds.has(numericFieldId);
+    console.log(`[DEBUG] Field ${fieldId} is organization field: ${isOrgField}`);
+    return isOrgField;
   }
 
   async initializeScheduledSyncs(): Promise<void> {
