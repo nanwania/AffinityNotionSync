@@ -227,7 +227,13 @@ export class SyncService {
             if (opportunityDetails.organization_id) {
               const orgFieldValues = await affinityService.getOrganizationFieldValues(opportunityDetails.organization_id);
               entry.organizationFields = orgFieldValues;
-              console.log(`[SIMPLE] Opportunity ${entry.entity_id}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}`);
+              
+              // Also get organization details for name and domain (for hyperlink)
+              const orgDetails = await affinityService.getOrganization(opportunityDetails.organization_id);
+              entry.organizationName = orgDetails.name;
+              entry.organizationDomain = orgDetails.domain;
+              
+              console.log(`[SIMPLE] Opportunity ${entry.entity_id}: org_id=${opportunityDetails.organization_id}, org_fields=${orgFieldValues.length}, org_name=${orgDetails.name}, org_domain=${orgDetails.domain}`);
             }
           } catch (error) {
             console.warn(`Could not enrich opportunity ${entry.entity_id}:`, error);
@@ -713,11 +719,34 @@ export class SyncService {
     for (const mapping of fieldMappings) {
       let value = null;
       
-      // Simple field value extraction based on field type
-      if (mapping.affinityField === 'Organization ID' && affinityEntry?.organizationId) {
-        // Use the organization_id we fetched from opportunity API
-        value = affinityEntry.organizationId;
-        console.log(`[SIMPLE] Organization ID: ${value}`);
+      // Simple field value extraction based on field type  
+      if (mapping.affinityField === 'Organization ID') {
+        // Extract numeric organization ID from companies field or our enriched data
+        if (affinityEntry?.organizationId) {
+          value = affinityEntry.organizationId;
+          console.log(`[SIMPLE] Organization ID (from enrichment): ${value}`);
+        } else {
+          // Fallback: Extract from companies field directly
+          const organizationField = affinityEntry?.entity?.fields?.find(f => f.id === 'companies');
+          if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+            value = organizationField.value.data[0].id;
+            console.log(`[SIMPLE] Organization ID (from companies field): ${value}`);
+          }
+        }
+      } else if (mapping.affinityField === 'Organization Name') {
+        // Extract organization name for hyperlink
+        if (affinityEntry?.organizationName) {
+          value = affinityEntry.organizationName;
+          console.log(`[SIMPLE] Organization Name (from enrichment): ${value} (domain: ${affinityEntry.organizationDomain})`);
+        } else {
+          // Fallback: Extract from companies field directly  
+          const organizationField = affinityEntry?.entity?.fields?.find(f => f.id === 'companies');
+          if (organizationField && organizationField.value?.data && Array.isArray(organizationField.value.data) && organizationField.value.data.length > 0) {
+            value = organizationField.value.data[0].name;
+            affinityEntry.organizationDomain = organizationField.value.data[0].domain; // Set domain for hyperlink
+            console.log(`[SIMPLE] Organization Name (from companies field): ${value} (domain: ${affinityEntry.organizationDomain})`);
+          }
+        }
       } else if (mapping.affinityFieldId && typeof mapping.affinityFieldId === 'string' && mapping.affinityFieldId.match(/^\d+$/)) {
         // This is a numeric organization field ID - look in organizationFields
         const numericFieldId = parseInt(mapping.affinityFieldId);
@@ -773,10 +802,28 @@ export class SyncService {
       
       if (value !== null) {
         const propertyType = notionService.getPropertyType(database, mapping.notionProperty);
-        notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
-          value, 
-          propertyType
-        );
+        
+        // Special handling for organization name to create hyperlink
+        if (mapping.affinityField === 'Organization Name' && affinityEntry?.organizationDomain && propertyType === 'rich_text') {
+          // Create rich_text with hyperlink
+          const domain = affinityEntry.organizationDomain;
+          const url = domain.startsWith('http') ? domain : `https://${domain}`;
+          notionProperties[mapping.notionProperty] = {
+            rich_text: [
+              {
+                type: 'text',
+                text: { content: value, link: { url } },
+                annotations: { color: 'blue' }
+              }
+            ]
+          };
+          console.log(`[SIMPLE] Organization Name hyperlink: ${value} -> ${url}`);
+        } else {
+          notionProperties[mapping.notionProperty] = notionService.convertAffinityToNotionProperty(
+            value, 
+            propertyType
+          );
+        }
       }
     }
 
