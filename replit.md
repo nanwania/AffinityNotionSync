@@ -98,6 +98,15 @@ The application is designed to be deployed on Replit with automatic database pro
 
 ## Recent Changes
 
+### July 20, 2025: Fixed Organization Field ID Mapping Issue  
+- **✅ RESOLVED:** "Last Known Cash Position" field mapping issue that was showing date/time codes instead of cash amounts
+- **✅ Corrected Field ID:** Changed from 5174383 (date field) to 5174381 (actual cash amount field)  
+- **✅ Added Organization Field Debugging:** Implemented comprehensive field discovery to identify correct field IDs from Affinity API
+- **✅ Enhanced Field Detection Logic:** Added automatic detection of numeric fields containing cash amounts (>1000)
+- **✅ Field ID Verification:** Confirmed field ID 5174381 contains proper numeric cash values (e.g., 3855600 = $3.8M)
+- **✅ Improved Error Handling:** Added fallback mechanisms to find alternative cash fields if primary mapping fails
+- Organization field syncing now works correctly for both "Last Known Cash Position" and "Post-Money Last Round" fields
+
 ### July 19, 2025: Complete Implementation Success - All Requirements Achieved
 - **✅ FULLY COMPLETE:** All three critical requirements successfully implemented and working
 - **✅ Duplicate Detection Fixed:** System now correctly identifies existing Affinity IDs in Notion pages, updating records instead of creating duplicates

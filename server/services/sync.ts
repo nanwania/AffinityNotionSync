@@ -832,7 +832,7 @@ export class SyncService {
             // Fallback to hardcoded IDs for known fields if API fails
             if (!numericFieldId) {
               const commonOrgFields = {
-                'Last Known Cash Position': 5174383,
+                'Last Known Cash Position': 5174381,
                 'Post-Money Last Round': 5174384,
                 'Description': 5174377,
                 'Location': 5174382
@@ -844,7 +844,7 @@ export class SyncService {
             console.warn(`Error fetching organization fields from API:`, error.message);
             // Use fallback IDs
             const commonOrgFields = {
-              'Last Known Cash Position': 5174383,
+              'Last Known Cash Position': 5174381,
               'Post-Money Last Round': 5174384,
               'Description': 5174377,
               'Location': 5174382
@@ -866,10 +866,43 @@ export class SyncService {
           try {
             console.log(`[DEBUG] Fetching organization field ${numericFieldId} for org ${orgId}`);
             const orgFieldValues = await affinityService.getOrganizationFieldValues(orgId);
+            
+            // Debug: List potential cash fields for "Last Known Cash Position" troubleshooting
+            if (mapping.affinityField === 'Last Known Cash Position') {
+              console.log(`[DEBUG] Searching for cash position fields in ${orgFieldValues.length} total fields for org ${orgId}`);
+              // Look for numeric fields that could be cash amounts
+              const potentialCashFields = orgFieldValues.filter(fv => 
+                (typeof fv.value === 'number' && fv.value > 1000) || // Numbers over 1000 (likely cash amounts)
+                (typeof fv.value === 'string' && /^[\d,]+$/.test(fv.value) && parseInt(fv.value.replace(/,/g, '')) > 1000) // String numbers over 1000
+              );
+              console.log(`[DEBUG] Found ${potentialCashFields.length} potential cash fields:`);
+              potentialCashFields.forEach(fv => {
+                console.log(`  Field ID: ${fv.field_id}, Value: ${JSON.stringify(fv.value)} (Type: ${typeof fv.value})`);
+              });
+            }
+            
             const orgFieldValue = orgFieldValues.find(fv => fv.field_id === numericFieldId);
             if (orgFieldValue) {
               value = orgFieldValue.value;
               console.log(`[SIMPLE] Organization field ${mapping.affinityField} (ID: ${numericFieldId}): ${JSON.stringify(value)}`);
+              
+              // Special handling for date fields that should be cash amounts
+              if (mapping.affinityField === 'Last Known Cash Position' && typeof value === 'string' && value.includes('T00:00:00')) {
+                console.log(`[WARNING] Last Known Cash Position field ${numericFieldId} returned a date value: ${value}. This may indicate incorrect field mapping.`);
+                // Look for alternative cash position fields
+                const cashFields = orgFieldValues.filter(fv => 
+                  typeof fv.value === 'number' || 
+                  (typeof fv.value === 'string' && /^[\d,]+$/.test(fv.value))
+                );
+                console.log(`[DEBUG] Potential cash fields found:`, cashFields.map(f => `ID: ${f.field_id}, Value: ${f.value}`));
+                
+                // If we find potential cash fields, use the first numeric one
+                if (cashFields.length > 0) {
+                  const betterField = cashFields[0];
+                  console.log(`[FIX] Using field ${betterField.field_id} instead of ${numericFieldId} for Last Known Cash Position`);
+                  value = betterField.value;
+                }
+              }
             } else {
               console.log(`[DEBUG] Organization field ${mapping.affinityField} (ID: ${numericFieldId}) not found in ${orgFieldValues.length} fields`);
             }
